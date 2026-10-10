@@ -119,6 +119,7 @@ def main(on_ready=None):
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--confidence',type=float,default=.30)
     parser.add_argument('--imgsz',type=int,default=360)
+    parser.add_argument('--inference-threads',type=int,choices=range(1,5),help='Thread NCNN; lascia risorse a Bridge e dashboard')
     parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=360,help='Limite di entrambi i lati dei frame elaborati, rapporto conservato')
     args = parser.parse_args()
     if not 0 < args.confidence <= 1 or not 32 <= args.imgsz <= 2048 or not 32 <= args.frame_size <= 2160: parser.error('Confidenza o risoluzione non valida')
@@ -128,7 +129,7 @@ def main(on_ready=None):
         from arduino.app_utils import Bridge
         call = Bridge.call
     rt = RTService(call)
-    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file)
+    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file,inference_threads=args.inference_threads)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
     with ThreadingHTTPServer((args.host,args.port),handler) as server:
         server.rt = rt

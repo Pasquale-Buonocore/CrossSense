@@ -81,7 +81,7 @@ class VideoTests(unittest.TestCase):
                 def release(self):pass
             calls=[]
             def track(frame,**kwargs):
-                self.assertLessEqual(max(frame.shape[:2]),360)
+                self.assertEqual(frame.shape[:2],(322,480))
                 calls.append(kwargs)
                 height,width=frame.shape[:2]
                 boxes=SimpleNamespace(id=Tensor([1]),xyxy=Tensor([[.36*width,.65*height,.44*width,.767*height+1]]),conf=Tensor([.912]),cls=Tensor([0]))
@@ -92,10 +92,10 @@ class VideoTests(unittest.TestCase):
                 getTextSize=lambda *a:((100,20),5),
                 resize=lambda f,size:SimpleNamespace(shape=(size[1],size[0],3)),imencode=lambda *a:(True,SimpleNamespace(tobytes=lambda:b'jpeg')),
                 IMWRITE_JPEG_QUALITY=1)
-            vision=VisionService(RecordingRT(),ZoneStore(path/'zones.json'),path/'video.mp4',path/'model.pt')
+            vision=VisionService(RecordingRT(),ZoneStore(path/'zones.json'),path/'video.mp4',path/'model.pt',frame_size=480,imgsz=320)
             with patch.dict(sys.modules,{'cv2':cv,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):vision.run()
             self.assertEqual(len(calls),3);self.assertTrue(all(c['persist'] and c['tracker']=='bytetrack.yaml' for c in calls))
-            self.assertTrue(all(c['imgsz']==352 for c in calls))
+            self.assertTrue(all(c['imgsz']==320 for c in calls))
             self.assertEqual(len(sent),4);self.assertTrue(all(f['valid'] for f in sent[:3]))
             self.assertTrue(all(f['tracks'][0][2]=='crossing' for f in sent[:3]))
             self.assertEqual(vision.snapshot()['status'],'completed');self.assertFalse(vision.snapshot()['fresh'])

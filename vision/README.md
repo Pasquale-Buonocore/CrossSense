@@ -136,3 +136,45 @@ conflittuali. Il test è passato sia con frame validi sia con overflow di tracce
 l'incompatibilità di PyTorch 2.2 con NumPy 2. Il catalogo di replay contiene
 i cinque MP4 aggiunti in `simulation/output`.
 Documentazione dell'API tracking: [Ultralytics](https://docs.ultralytics.com/modes/track/).
+
+## Configurazione UNO Q aggiornata: video 480, detection 320
+
+Il deployment `crosssense-yolo-360` mantiene il nome storico, ma usa
+`frame_size=480`, `imgsz=320` e `inference_threads=2` in `vision-source.json`.
+Per i replay 2528×1696 il frame e il JPEG annotato sono 480×322. YOLO lavora
+su 320×320 e riporta le coordinate delle box al frame video; box e label
+vengono disegnati a 480×322. Gli FPS mostrati accanto all’inferenza sono la
+media dei frame completati negli ultimi 30 campioni, includendo decodifica,
+inferenza, tracking e JPEG. A sorgente non fresca vengono mostrati come `—`.
+
+Il modello NCNN va esportato a 320, perché contiene reshape legati alla
+risoluzione. Conservare l’export 352 se si vuole tornare alla configurazione
+precedente. Per replicare il deployment con il nuovo modello:
+
+```sh
+python3 scripts/package_rt.py .local/crosssense-480-320 --video-dir .local/performance/videos-480 --model models/yolo26n_320_ncnn_model --controller-cycle --loop-video --frame-size 480 --imgsz 320 --inference-threads 2 --zip
+```
+
+Le copie dei cinque MP4 sono ridotte a 480×322 (H.264 CRF 18), così la scheda
+non deve decodificare 2528×1696 a ogni frame. Gli originali restano in
+`simulation/output` e nel backup `.local/backup-480-320/videos-original`
+dell’app sulla scheda. Le ROI normalizzate e la scelta del video sono conservate.
+NCNN carica i pesi con due thread; PyTorch, OpenCV e BLAS usano un thread
+per evitare concorrenza eccessiva con Bridge e HTTP.
+
+L’adapter interroga la MCU con duplicati identici fra due immagini, senza
+rinnovarne la validità; EOF e guasti restano invalidanti. Il limite RPC di
+250 ms e il watchdog di 1000 ms restano attivi. `/api/rt` espone `rpc_ms`
+e `sent_age_ms` per distinguere ritardi RPC da osservazioni vecchie.
+
+La dashboard interroga le osservazioni ogni 200 ms, separatamente dal
+caricamento asincrono dei JPEG. Un JPEG non più presente nella cache viene
+ritentato senza azzerare lo stato YOLO. La soglia di freschezza della visione
+resta 750 ms; un’immagine lenta non blocca il polling delle osservazioni.
+Test di regressione frontend: `node dashboard/tests/vision.test.cjs`.
+
+La preview scarica ogni JPEG una sola volta e lo visualizza tramite un Blob
+URL locale, evitando una seconda richiesta `no-store` dopo il precaricamento.
+Gli URL sostituiti vengono rilasciati. Un errore temporaneo nel polling
+conserva l’ultimo snapshot fino alla normale scadenza dei 750 ms; non rinnova
+la sua età e non modifica lo stato ricevuto dalla MCU.

@@ -101,6 +101,8 @@ class RTService:
         self.seen = {}
         self.thread = None
         self.in_flight = False
+        self.last_wire = None
+        self.rpc_ms = None
 
     def publish(self, frame):
         f = copy.deepcopy(validate_frame(frame))
@@ -123,7 +125,7 @@ class RTService:
     def snapshot(self):
         with self.lock:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
-            return {'connected':self.call is not None and age is not None and age < 1000 and self.error is None,'age_ms':age,'state':copy.deepcopy(self.state),'error':self.error}
+            return {'connected':self.call is not None and age is not None and age < 1000 and self.error is None,'age_ms':age,'state':copy.deepcopy(self.state),'error':self.error,'rpc_ms':self.rpc_ms,'sent_age_ms':self.last_wire.get('age_ms') if self.last_wire else None}
 
     def request(self, kind, request_id):
         if kind not in ('pedestrian','accessible','vehicle_priority') or not isinstance(request_id,str) or not 1 <= len(request_id) <= 80:
@@ -152,20 +154,29 @@ class RTService:
                 f, captured = self.latest
                 f = copy.deepcopy(f)
                 if f['age_ms'] is not None: f['age_ms'] = min(0xffffffff,f['age_ms']+round((self.clock()-captured)*1000))
-                # A repeated acquisition cannot carry a new button edge: report unavailable instead.
+                # Poll telemetry by retrying the identical wire frame. The MCU
+                # acknowledges duplicates without applying them or renewing its
+                # watchdog. A changed request needs a new acquisition/message.
                 self.sequence = (self.sequence+1) & 0xffffffff
                 if getattr(self,'last_sent',None) == (f['stream'],f['frame']):
-                    f = dict(stream=self.stream,frame=self.sequence,time_ms=None,age_ms=None,valid=False,crossing='unknown',approach='unknown',tracks=[],requests=[False]*3)
+                    if self.last_wire is not None and self.requests == self.last_wire['requests']:
+                        age = f['age_ms']
+                        f = copy.deepcopy(self.last_wire)
+                        if f['time_ms'] is not None: f['age_ms'] = age
+                    else:
+                        f = dict(stream=self.stream,frame=self.sequence,time_ms=None,age_ms=None,valid=False,crossing='unknown',approach='unknown',tracks=[],requests=[False]*3)
                 else:
                     self.last_sent = (f['stream'],f['frame'])
                     f['stream'], f['frame'] = self.stream, self.sequence
             levels = list(self.requests)
             f['requests'] = levels
+            self.last_wire = copy.deepcopy(f)
             self.in_flight = True
         start = self.clock()
         try:
             s = validate_state(self.call('crosssense_update',encode(validate_frame(f))),f['frame'])
-            if self.clock()-start > .250:
+            self.rpc_ms = round((self.clock()-start)*1000,1)
+            if self.rpc_ms > 250:
                 raise ValueError('RPC oltre budget 250 ms')
             with self.lock:
                 self.state, self.received, self.error = s,self.clock(),None

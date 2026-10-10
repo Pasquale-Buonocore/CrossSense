@@ -4,6 +4,9 @@ import json
 import os
 import sys
 if os.environ.get('BOARD_NAME') == 'unoq':
+    for name in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS'):
+        os.environ[name] = '1'
+if os.environ.get('BOARD_NAME') == 'unoq':
     # App Lab provides headless OpenCV. Prefer it to the GUI wheel pulled by
     # Ultralytics in the app venv, which requires libGL absent from this image.
     base_site=Path(sys.base_prefix)/'lib'/f'python{sys.version_info.major}.{sys.version_info.minor}'/'site-packages'
@@ -25,6 +28,7 @@ if __name__=='__main__':
         sys.argv+=['--video',str(assets/config.get('video','input.mp4')),'--model',str(assets/config.get('model','yolo26n.pt')),
                    '--imgsz',str(config.get('imgsz',360)),'--frame-size',str(config.get('frame_size',360))]
         if config.get('loop'): sys.argv+=['--loop-video']
+        if config.get('inference_threads'): sys.argv+=['--inference-threads',str(config['inference_threads'])]
         if config.get('video_directory'): sys.argv+=['--video-dir',str(assets/config['video_directory'])]
     demo=(Path(__file__).resolve().parent/'standard-cycle.enabled').exists()
     if demo and source.exists(): raise RuntimeError('Video YOLO e prova sintetica devono usare app separate')

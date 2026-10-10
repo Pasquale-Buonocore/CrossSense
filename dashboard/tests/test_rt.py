@@ -62,5 +62,22 @@ class AdapterTests(unittest.TestCase):
         rt.publish(frame()|{'stream':8})
         self.assertEqual(rt.requests,[False]*3)
 
+    def test_slow_producer_retries_without_renewing_capture(self):
+        now=[0.0];sent=[]
+        def call(m,p):
+            f=json.loads(p);sent.append(f)
+            return json.dumps(state(f['frame']))
+        rt=RTService(call,lambda:now[0]);rt.publish(frame());rt.exchange()
+        now[0]=.2;rt.exchange()
+        self.assertEqual(sent[0]['frame'],sent[1]['frame'])
+        self.assertEqual(sent[0]['time_ms'],sent[1]['time_ms'])
+        self.assertEqual(sent[1]['age_ms'],200)
+        self.assertTrue(sent[1]['valid'])
+        now[0]=1.2;rt.exchange()
+        self.assertEqual(sent[-1]['frame'],sent[0]['frame'])
+        self.assertEqual(sent[-1]['age_ms'],1200)
+        rt.publish(frame()|{'frame':2,'time_ms':1300});rt.exchange()
+        self.assertNotEqual(sent[-1]['frame'],sent[0]['frame'])
+
 
 if __name__=='__main__': unittest.main()

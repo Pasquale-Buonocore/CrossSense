@@ -21,7 +21,7 @@ class VisionView {
       if(points.length>=32){this.note.textContent='Massimo 32 vertici per zona.';return;}
       points.push([Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))]);this.draw();
     });
-    this.refresh();setInterval(()=>this.refresh(),400);
+    this.refresh();setInterval(()=>this.refresh(),200);
   }
   async refresh(){
     if(this.polling)return;this.polling=true;
@@ -29,14 +29,28 @@ class VisionView {
     try{
       const response=await fetch('/api/vision',{cache:'no-store'});if(!response.ok)throw Error('Visione non disponibile');
       const data=await response.json();if(sourceToken!==this.sourceToken)return;this.data=data;this.receivedAt=Date.now();
-      if(!this.editing&&this.mode==='hardware'&&data.frame&&data.frame.serial!==this.serial){
-        const serial=data.frame.serial,url=`/api/vision/frame.jpg?serial=${serial}`,image=new Image();
-        await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Frame scaduto'));image.src=url;});
-        if(sourceToken===this.sourceToken&&!this.editing&&this.mode==='hardware'){this.image.src=url;this.serial=serial;}
-      }
       this.render(this.mode);
-    }catch{if(sourceToken===this.sourceToken){this.data=null;this.render(this.mode);}}
+      if(!this.imageLoading&&!this.editing&&this.mode==='hardware'&&data.frame&&data.frame.serial!==this.serial){
+        this.loadPreview(data.frame.serial,sourceToken);
+      }
+    }catch{if(sourceToken===this.sourceToken)this.render(this.mode);}
     finally{this.polling=false;}
+  }
+  async loadPreview(serial,sourceToken){
+    this.imageLoading=true;let url=null;
+    try{
+      const response=await fetch(`/api/vision/frame.jpg?serial=${serial}`,{cache:'no-store'});
+      if(!response.ok)throw Error('Frame scaduto');
+      url=URL.createObjectURL(await response.blob());
+      const image=new Image();
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});
+      if(sourceToken===this.sourceToken&&!this.editing&&this.mode==='hardware'){
+        const previous=this.previewUrl;
+        this.image.src=url;this.serial=serial;this.previewUrl=url;url=null;
+        if(previous)URL.revokeObjectURL(previous);
+      }
+    }catch{} // Preview failure does not invalidate observation metadata.
+    finally{if(url)URL.revokeObjectURL(url);this.imageLoading=false;}
   }
   render(mode){
     const changed=this.mode!==mode;this.mode=mode;
@@ -57,7 +71,7 @@ class VisionView {
       const fresh=data?.fresh&&data.frame&&(data.age_ms+(Date.now()-this.receivedAt)<750),frame=data?.frame;
       const status={idle:'Nessun video caricato',loading:'Caricamento YOLO…',completed:'Video terminato',error:'Errore visione',stopped:'Video fermato'}[data?.status]||'Osservazioni obsolete';
       document.getElementById('vision-badge').textContent=fresh?'● YOLO':status;
-      document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza`:'Video MP4 · configurare la sorgente sul server';
+      document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza · ${fresh?(frame?.fps??'—'):'—'} FPS`:'Video MP4 · configurare la sorgente sul server';
       document.getElementById('scene-source').textContent=this.editing?'MODIFICA ZONE · FRAME FERMO':fresh?'VIDEO MP4 · YOLO26 + BYTETRACK':status.toUpperCase();
       document.getElementById('notice-detail').textContent=data?.available?'Video YOLO · lo stato del controller è mostrato separatamente.':'Stato RT dal servizio · video MP4 non configurato.';
       document.getElementById('vision-detail').textContent=data?.error||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · frame video ${frame.video_frame} · ${Math.round(frame.video_ms/1000)} s · ROI revisione ${frame.zones_revision}`:status);

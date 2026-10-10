@@ -1,0 +1,40 @@
+const {readFileSync}=require('node:fs');
+const {join}=require('node:path');
+const {runInNewContext}=require('node:vm');
+const assert=require('node:assert/strict');
+const nodes=new Map(),images=[];
+const node=()=>({textContent:'',src:'',replaceChildren(){},append(){}});
+const get=id=>{if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);};
+let now=0,serial=1,calls=0,jpegCalls=0,failMetadata=false;
+const revoked=[];
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+const context={document:{getElementById:get,createElement:node},Date:{now:()=>now},Image:class {constructor(){images.push(this);}},URL:{createObjectURL:()=>`blob:${jpegCalls}`,revokeObjectURL:url=>revoked.push(url)},fetch:async(path)=>{
+  if(path.startsWith("/api/vision/frame.jpg")){jpegCalls++;return {ok:true,blob:async()=>({})};}
+  if(failMetadata)throw Error("network hiccup");
+  calls++;
+  return {ok:true,json:async()=>({available:true,status:'running',fresh:true,age_ms:300,source:'video.mp4',videos:[],frame:{serial,inference_ms:170,fps:5,width:480,height:322,detections:[],observation:{valid:true,crossing:'clear'}}})};
+}};
+runInNewContext(readFileSync(join(__dirname,'../static/vision.js'),'utf8').replace('globalThis.visionView=new VisionView();','globalThis.VisionView=VisionView;'),context);
+const view=Object.create(context.VisionView.prototype);
+Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'hardware',image:node(),videoSelect:node(),note:node(),serial:null,draw(){}});
+(async()=>{
+ await view.refresh();await settle();
+ assert.equal(view.polling,false,'JPEG loading must not block metadata polling');
+ assert.equal(get('vision-badge').textContent,'● YOLO');
+ assert.match(get('vision-description').textContent,/5 FPS/);
+ now=200;serial=2;await view.refresh();
+ assert.equal(calls,2);assert.equal(images.length,1,'one preview load at a time');
+ images[0].onerror();await settle();
+ assert.equal(view.data.frame.serial,2,'evicted JPEG must not discard detection metadata');
+ assert.equal(get('vision-badge').textContent,'● YOLO');
+ await view.refresh();await settle();assert.equal(images.length,2);
+ images[1].onload();await settle();assert.equal(view.serial,2);
+ assert.equal(view.image.src,"blob:2","display reuses downloaded JPEG instead of refetching");
+ assert.equal(jpegCalls,2);assert.deepEqual(revoked,["blob:1"]);
+ failMetadata=true;await view.refresh();
+ assert.equal(get("vision-badge").textContent,"● YOLO","one failed fetch retains still-fresh metadata");
+ now=700;await view.refresh();
+ assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','actual stale observations must still be visible');
+ assert.match(get('vision-description').textContent,/— FPS/);
+ console.log('VISION_UI_OK: metadata polls during JPEG loads, eviction preserves observations, genuine staleness still displayed.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

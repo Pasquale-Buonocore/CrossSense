@@ -86,3 +86,35 @@ ai 30 FPS originali quando la catena non ne sostiene la frequenza.
 
 I server e i worker CrossSense sul Mac sono stati arrestati. Elaborazione,
 dashboard e scambio RT continuano sulla UNO Q anche senza browser.
+
+
+## Riavvio e ottimizzazione video — 10 ottobre 2026, sera
+
+Wi-Fi aggiornato; dashboard verificata su `http://192.168.1.196:8080`.
+L’app `crosssense-yolo-360` usa ora preview 480×322 e detection NCNN 320×320.
+Esportato lo stesso YOLO26n a 320, mantenendo l’export 352. NCNN usa due
+thread al caricamento dei pesi; BLAS, PyTorch e OpenCV limitati a un thread.
+Cinque MP4 ricodificati a 480×322 H.264 CRF 18, preservando numero di frame
+e frame rate; originali conservati localmente e nel backup della app.
+ROI revisione 3, posizioni semafori e selezione `output_2.mp4` conservate.
+
+FPS reali della pipeline aggiunti accanto all’inferenza (finestra 30 frame).
+Corretto l’adapter RT: tra immagini nuove interroga la telemetria usando
+il duplicato esatto dell’ultimo messaggio, aggiornando solo l’età. STM32 non
+lo riapplica e non rinnova il watchdog. Prima si generavano indisponibilità
+artificiali quando l’inferenza oltrepassava il tick RPC di 200 ms. I ritardi
+RPC oltre 250 ms continuano a invalidare la connessione, senza mascherarli.
+
+Prova finale su `output_2.mp4`, con browser dashboard attivi: 150
+campioni in 70.3 s, 5.11 FPS, inferenza mediana
+178.3 ms (p95 195.6 ms), RPC
+mediana 165.4 ms, massimo 204.1 ms.
+Nessun campione disconnesso o con fault. Prima della conversione MP4 a 480,
+la nuova configurazione sosteneva circa 4,38 FPS e aveva due campioni TIMEOUT
+su 150. Il campione iniziale a 360/352 sosteneva 5,36 FPS, ma presentava due
+errori di budget RPC e tre INVALID_DATA su 100 campioni. Le finestre non
+sono un benchmark controllato né una garanzia di assenza di guasti futuri.
+
+Passati 21 test dashboard, 8 test vision, controlli JavaScript, test nativo
+STM32 del protocollo e prova integrata con acquisizione 2,5 Hz/RPC 5 Hz:
+nessun guasto tra immagini, TIMEOUT preservato quando l’acquisizione cessa.

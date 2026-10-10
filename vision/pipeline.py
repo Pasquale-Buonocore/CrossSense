@@ -1,6 +1,6 @@
 """Read every MP4 frame, track with YOLO/ByteTrack, publish an atomic snapshot."""
 import copy
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from pathlib import Path
 import secrets
 import threading
@@ -27,7 +27,7 @@ def observation(stream, sequence, captured_ms, detections, usable=True):
 
 
 class VisionService:
-    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=360, loop=False, clock=time.monotonic, frame_size=360, video_dir=None, selection_file=None):
+    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=360, loop=False, clock=time.monotonic, frame_size=360, video_dir=None, selection_file=None, inference_threads=None):
         self.rt,self.zones,self.clock = rt,zones,clock
         self.video,self.model_path = Path(video) if video else None,Path(model) if model else None
         self.catalog=VideoCatalog(video_dir,selection_file)
@@ -35,6 +35,7 @@ class VisionService:
         self.source_generation=0
         self.device,self.confidence,self.imgsz,self.loop = device,confidence,imgsz,loop
         self.frame_size = frame_size
+        self.inference_threads = inference_threads
         self.lock,self.stop = threading.RLock(),threading.Event()
         self.stream,self.sequence = secrets.randbits(32),0
         self.status,self.error = 'idle',None
@@ -93,12 +94,18 @@ class VisionService:
         cap = None
         try:
             import cv2
+            if self.inference_threads is not None:
+                import torch
+                torch.set_num_threads(1)
+                cv2.setNumThreads(1)
             from ultralytics import YOLO
             model = YOLO(str(self.model_path))
             # Round down to the stride: neither inference side may exceed imgsz.
             stride = max(int(v) for v in getattr(getattr(model,'model',None),'stride',[32]))
             inference_size = max(stride,(self.imgsz//stride)*stride)
             generation,previous_ms=-1,-1
+            completed = deque(maxlen=30)
+            threads_configured = False
             while not self.stop.is_set():
                 with self.lock: requested_generation,video=self.source_generation,self.video
                 if generation != requested_generation:
@@ -109,6 +116,7 @@ class VisionService:
                     if not 0 < fps <= 240: fps=25
                     for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
                     generation,index=requested_generation,0
+                    completed.clear()
                 began = self.clock()
                 success,frame = cap.read()
                 if not success:
@@ -131,6 +139,7 @@ class VisionService:
                         self.reset_stream()
                     for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
                     index = 0
+                    completed.clear()
                     continue
                 captured_ms = max(previous_ms+1,round(began*1000))
                 previous_ms = captured_ms
@@ -146,6 +155,18 @@ class VisionService:
                 start = self.clock()
                 result = model.track(frame,persist=True,tracker='bytetrack.yaml',classes=list(CLASSES),conf=self.confidence,
                                      device=self.device,imgsz=inference_size,iou=.50,max_det=500,verbose=False)[0]
+                if self.inference_threads is not None and not threads_configured:
+                    backend = getattr(getattr(model.predictor,'model',None),'backend',None)
+                    net = getattr(backend,'net',None)
+                    if net is not None:
+                        # NCNN packs convolution weights for the load-time thread
+                        # count. Reload before changing it; changing opt on a
+                        # loaded net produces warnings and slower inference.
+                        net.clear()
+                        net.opt.num_threads = self.inference_threads
+                        net.load_param(str(self.model_path/'model.ncnn.param'))
+                        net.load_model(str(self.model_path/'model.ncnn.bin'))
+                    threads_configured = True
                 inference_ms = round((self.clock()-start)*1000,1)
                 height,width = frame.shape[:2]
                 detections = []
@@ -180,11 +201,13 @@ class VisionService:
                     obs['age_ms'] = max(0,round(self.clock()*1000)-captured_ms)
                     self.rt.publish(obs)
                     self.serial += 1
+                    completed.append(self.clock())
+                    fps_actual = round((len(completed)-1)/(completed[-1]-completed[0]),1) if len(completed)>1 and completed[-1]>completed[0] else None
                     self.frames[self.serial] = jpeg.tobytes()
                     while len(self.frames) > 4: self.frames.popitem(last=False)
                     self.current = {'serial':self.serial,'stream':self.stream,'sequence':self.sequence,'video_frame':index,
                                     'video_ms':round((index-1)*1000/fps),'width':width,'height':height,
-                                    'inference_ms':inference_ms,'inference_size':inference_size,'observation':obs,'detections':detections,'zones_revision':config['revision']}
+                                    'inference_ms':inference_ms,'fps':fps_actual,'inference_size':inference_size,'observation':obs,'detections':detections,'zones_revision':config['revision']}
                     self.received,self.status,self.error = began,'running',None
                 self.stop.wait(max(0,1/fps-(self.clock()-began)))
         except Exception as exc:

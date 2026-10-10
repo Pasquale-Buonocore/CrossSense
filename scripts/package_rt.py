@@ -15,6 +15,7 @@ parser.add_argument('--model',type=Path,default=root/'models'/'yolo26n.pt')
 parser.add_argument('--zones-file',type=Path,help='Configurazione salvata dalla dashboard da usare nella app')
 parser.add_argument('--loop-video',action='store_true')
 parser.add_argument('--imgsz',type=int,default=360)
+parser.add_argument('--inference-threads',type=int,choices=range(1,5))
 parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=360)
 parser.add_argument('--zip',action='store_true',help='Crea anche uno ZIP importabile in Arduino App Lab')
 args=parser.parse_args()
@@ -35,6 +36,7 @@ if has_video:
     assets=args.destination/'python'/'vision'/'assets'
     assets.mkdir()
     source={'loop':args.loop_video,'imgsz':args.imgsz,'frame_size':args.frame_size}
+    if args.inference_threads: source['inference_threads']=args.inference_threads
     if args.video: shutil.copy2(args.video,assets/'input.mp4');source['video']='input.mp4'
     if args.video_dir:
         for video in videos:
