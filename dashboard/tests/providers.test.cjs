@@ -1,0 +1,14 @@
+const {readFileSync}=require('node:fs');
+const {runInNewContext}=require('node:vm');
+const assert=require('node:assert/strict');
+const source=readFileSync(require('node:path').join(__dirname,'../static/providers.js'),'utf8');
+const {DemoProvider,HardwareProvider}=runInNewContext(source+'\n({DemoProvider,HardwareProvider})');
+const demo=new DemoProvider();
+assert.equal(demo.request('pedestrian','r1').status,'accepted');
+demo.request('pedestrian','r1');assert.equal(demo.snapshot().pending.length,1);
+demo.setScenario('offline');const before=demo.snapshot().seq;demo.tick();assert.equal(demo.snapshot().seq,before);assert.equal(demo.request('pedestrian','r2').status,'rejected');
+demo.setScenario('normal');assert.equal(demo.snapshot().pending.length,0);
+demo.setScenario('stopped');for(let i=0;i<60;i++)demo.tick();assert.equal(demo.snapshot().phase,3);assert.equal(demo.snapshot().elapsed,0);
+const hardware=new HardwareProvider();assert.equal(hardware.snapshot().completed,null);assert.equal(hardware.request('pedestrian','r3').status,'rejected');for(let i=0;i<10;i++)hardware.tick();assert.equal(hardware.snapshot().seq,0);
+const fresh=new DemoProvider();assert.equal(fresh.snapshot().completed,0);
+console.log('Provider checks passed: deduplication, offline, clearance protection, hardware isolation.');
