@@ -259,3 +259,11 @@ L'ambiente locale di base non richiede pacchetti esterni. La dashboard usa la li
 - [Proposta di interfaccia Bridge v1 da concordare](protocol/bridge-v1.md)
 
 Cartelle riservate: `vision/` pipeline e calibrazione, `firmware/` controller MCU, `dashboard/` telemetria, `simulation/` replay e confronto.
+
+## Integrazione video YOLO di Gaetano
+
+La pipeline MP4 → YOLO26n/ByteTrack → ROI → Bridge v1 è disponibile nel servizio
+dashboard. Mostra box con ID, classe e confidenza, occupazione e attese correnti.
+**Configura zone YOLO** consente di ridisegnare e salvare i quattro poligoni
+condivisi; modifica delle ROI e loop video creano un nuovo stream RT.
+Avvio, dipendenze e pacchetto UNO Q in [vision/README.md](vision/README.md).

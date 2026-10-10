@@ -11,7 +11,8 @@ $('ped-signal').textContent=offline?'—':snapshot.source==='hardware'?snapshot.
 $('count').textContent=completed??'—';$('avg').textContent=waitSamples.length?`${Math.round(waitSamples.reduce((a,b)=>a+b,0)/waitSamples.length)} s`:'—';$('ltr').textContent=left??'—';$('rtl').textContent=right??'—';['ltr','rtl'].forEach((id,i)=>$(id+'-bar').style.width=`${completed?100*(i?right:left)/completed:0}%`);
 if(snapshot.source==='hardware'){ $('notice-title').textContent=offline?'Hardware disconnesso':'Controller RT collegato';$('vision-badge').textContent=offline?'DISCONNESSO':'● RT';$('controller-description').textContent=offline?'Telemetria MCU · non disponibile':'Telemetria MCU · Bridge v1';$('vision-description').textContent=offline?'Frame di esempio · uscite MCU non disponibili':'Frame di esempio · colori ricevuti dalla STM32';}
 trafficSignals.render(snapshot.outputs);
-document.querySelectorAll('[data-request]').forEach(b=>b.disabled=offline||paused);$('export').disabled=snapshot.source==='hardware';}
+document.querySelectorAll('[data-request]').forEach(b=>b.disabled=offline||paused);$('export').disabled=snapshot.source==='hardware';
+globalThis.visionView?.render(mode);}
 function update(){render(provider.snapshot());}
 function setMode(value){
   provider?.dispose();mode=value;events=0;$('event-list').replaceChildren();$('event-total').textContent='0 EVENTI';

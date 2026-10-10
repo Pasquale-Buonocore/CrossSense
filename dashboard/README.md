@@ -1,6 +1,6 @@
 # Dashboard CrossSense
 
-Prima dashboard locale, senza dipendenze esterne.
+Dashboard locale; la visione video opzionale richiede le dipendenze in `vision/requirements.txt`.
 
 ```sh
 python3 dashboard/server.py --port 8080
@@ -27,7 +27,7 @@ l'hardware; in Hardware le metriche Linux non ancora disponibili restano vuote.
 
 ## Verifica
 
-La pagina legge `GET /api/config`: con Bridge configurato parte automaticamente
+La pagina legge `GET /api/config`: con Bridge o video configurato parte automaticamente
 in Hardware, altrimenti in Demo. Nell'app di prova STM32 compare **Ripeti prova
 STM32** dopo i due cicli automatici. Dashboard, API e servizio Bridge usano
 un unico server sulla porta 8080. Fermare il precedente processo dashboard e
@@ -90,9 +90,9 @@ alla relativa conferma; nuovi pulsanti durante uno scambio/reset vengono
 rifiutati e possono essere riprovati. Errori conservano il livello pendente.
 Senza nuova immagine il servizio invia un nuovo frame invalido, senza
 riutilizzare l'immagine come osservazione fresca. Non deduce occupazione,
-conteggi o tempi d'attesa dalle fasi: questi dati restano indisponibili in
-Hardware. Mostra fase, uscite comandate e residuo reale (anche null).
-Video live e statistiche Linux non sono implementati qui. Il firmware offre
+conteggi o tempi d'attesa dalle fasi: questi dati restano indisponibili senza una sorgente visione; con YOLO,
+occupazione e pedoni in attesa vengono dal frame fresco. Mostra fase, uscite comandate e residuo reale (anche null).
+La [pipeline video YOLO](../vision/README.md) mostra MP4 elaborati con bounding box, classe, confidenza e ROI configurabili dalla dashboard. Le statistiche di attraversamenti completati non sono ancora implementate. Il firmware offre
 anche un [ciclo standard di prova](../firmware/docs/standard-cycle.md), abilitato
 nel pacchetto con `--standard-cycle`: l'app avvia due cicli sintetici usando
 questa API. Lo sketch restituisce la telemetria Bridge v1 senza configurare GPIO.
@@ -126,3 +126,14 @@ separato dai file pubblici. `--layout-file /percorso/layout.json` permette
 un percorso diverso. Riavvio e aggiornamento dei sorgenti conservano il file.
 I vecchi salvataggi personali non vengono più usati. La disposizione della
 UNO Q è stata inizializzata con le posizioni presenti nel browser del team.
+
+## Video YOLO e zone
+
+```sh
+.venv/bin/python dashboard/server.py --video /percorso/video.mp4 --model models/yolo26n.pt --loop-video
+```
+
+**Configura zone YOLO** ferma la vista mentre si disegnano le ROI; inferenza e
+RT continuano. Scegliere una zona, svuotarla, cliccare i vertici in ordine e
+salvare. Zone iniziali, validazione, API, persistenza e pacchetto UNO Q sono
+descritti in [vision/README.md](../vision/README.md).

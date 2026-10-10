@@ -53,7 +53,7 @@ class TrafficSignals {
       const response=await fetch('/api/signal-layout',{cache:'no-store'});if(!response.ok)throw Error('HTTP');
       const data=await response.json();
       if(!this.saving&&!this.drag&&!Object.keys(this.dirty).length&&!this.edit.checked&&data.revision>this.revision)this.applyLayout(data);
-      this.edit.disabled=false;this.note.textContent='Posizioni condivise con tutti · salvate sulla scheda.';
+      this.edit.disabled=this.scene.querySelector('.zone-editing')!==null;this.note.textContent='Posizioni condivise con tutti · salvate sulla scheda.';
     }catch{this.note.textContent='Impossibile caricare le posizioni condivise. Riprovo automaticamente.';}
     finally{this.loading=false;}
   }

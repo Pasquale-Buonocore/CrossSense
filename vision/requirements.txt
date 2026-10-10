@@ -1,0 +1,5 @@
+ultralytics>=8.4,<9
+lap>=0.5.12,<1
+# PyTorch 2.2 is the last wheel available on Intel macOS and uses NumPy 1.x.
+numpy>=1.23,<2; sys_platform == "darwin" and platform_machine == "x86_64"
+opencv-python>=4.7,<4.12; sys_platform == "darwin" and platform_machine == "x86_64"

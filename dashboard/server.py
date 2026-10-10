@@ -4,14 +4,19 @@ import json
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import sys
+from urllib.parse import urlsplit, parse_qs
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from rt import RTService
 from layout import LayoutStore
+from vision.zones import ZoneStore, RevisionConflict
+from vision.pipeline import VisionService
 
 
 class Handler(SimpleHTTPRequestHandler):
     def log_request(self, code='-', size='-'):
         # Keep MCU phase/trial messages visible instead of logging each 5/10 Hz poll.
-        if code == 200 and self.path in ('/api/rt','/api/observations','/api/trial'):
+        if code == 200 and (self.path in ('/api/rt','/api/observations','/api/trial','/api/vision','/api/vision/zones') or self.path.startswith('/api/vision/frame.jpg')):
             return
         super().log_request(code,size)
 
@@ -29,8 +34,27 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
+        vision = getattr(self.server,'vision',None)
+        path = urlsplit(self.path)
+        if path.path.startswith('/api/vision'):
+            if vision is None: return self.reply({'available':False,'status':'unavailable'})
+            if path.path == '/api/vision': return self.reply(vision.snapshot())
+            if path.path == '/api/vision/zones': return self.reply(vision.zones.snapshot())
+            if path.path == '/api/vision/frame.jpg':
+                try: raw = vision.image(int(parse_qs(path.query).get('serial',[''])[0]))
+                except ValueError: raw = None
+                if raw is None: return self.reply({'error':'Frame non più disponibile'},404)
+            elif path.path == '/api/vision/reference.jpg':
+                raw = (Path(__file__).resolve().parents[1]/'vision'/'config'/'reference.jpg').read_bytes()
+            else: return self.reply({'error':'Endpoint sconosciuto'},404)
+            self.send_response(200)
+            self.send_header('Content-Type','image/jpeg')
+            self.send_header('Content-Length',str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
         if self.path == '/api/config':
-            self.reply({'default_mode':'hardware' if self.server.rt.call is not None else 'demo'})
+            self.reply({'default_mode':'hardware' if self.server.rt.call is not None or (vision and vision.video is not None) else 'demo'})
         elif self.path == '/api/trial':
             trial = getattr(self.server,'trial',None)
             self.reply(trial.snapshot() if trial is not None else {'available':False,'status':'unavailable'})
@@ -47,9 +71,14 @@ class Handler(SimpleHTTPRequestHandler):
             return self.reply({'error':'Richiesto JSON'},415)
         try:
             size = int(self.headers.get('Content-Length','0'))
-            if not 0 < size <= 4096: raise ValueError('Dimensione richiesta non valida')
+            if not 0 < size <= (16384 if self.path == '/api/vision/zones' else 4096): raise ValueError('Dimensione richiesta non valida')
             data = json.loads(self.rfile.read(size))
-            if self.path == '/api/trial':
+            vision = getattr(self.server,'vision',None)
+            if self.path == '/api/vision/zones':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                self.reply(vision.configure(data))
+            elif self.path == '/api/trial':
+                if vision and vision.video is not None: return self.reply({'error':'Il video YOLO è la sorgente attiva'},409)
                 trial = getattr(self.server,'trial',None)
                 if trial is None: return self.reply({'error':'Prova sintetica non disponibile'},409)
                 if data != {}: raise ValueError('La prova richiede un oggetto JSON vuoto')
@@ -58,11 +87,14 @@ class Handler(SimpleHTTPRequestHandler):
             elif self.path == '/api/signal-layout':
                 self.reply(self.server.layout.update(data))
             elif self.path == '/api/observations':
+                if vision and vision.video is not None: return self.reply({'error':'Le osservazioni sono prodotte dal video YOLO'},409)
                 self.server.rt.publish(data)
                 self.reply({'status':'buffered'})
             elif self.path == '/api/requests':
                 self.reply(self.server.rt.request(data.get('type'),data.get('request_id')))
             else: self.reply({'error':'Endpoint sconosciuto'},404)
+        except RevisionConflict as exc:
+            self.reply({'error':str(exc)},409)
         except OSError:
             self.reply({'error':'Salvataggio sul server non riuscito'},503)
         except (ValueError,TypeError,AttributeError) as exc:
@@ -75,23 +107,36 @@ def main(on_ready=None):
     parser.add_argument('--host',default='127.0.0.1')
     parser.add_argument('--bridge',action='store_true',help='Usa arduino.app_utils sulla UNO Q')
     parser.add_argument('--layout-file',type=Path,default=Path(__file__).parent/'.local'/'signal-layout.json')
+    parser.add_argument('--video',type=Path,help='MP4 da elaborare con YOLO26n')
+    parser.add_argument('--model',type=Path,default=Path(__file__).resolve().parents[1]/'models'/'yolo26n.pt')
+    parser.add_argument('--zones-file',type=Path,default=Path(__file__).parent/'.local'/'vision-zones.json')
+    parser.add_argument('--loop-video',action='store_true',help='Ripeti il video con un nuovo stream e tracker')
+    parser.add_argument('--device',default='cpu')
+    parser.add_argument('--confidence',type=float,default=.30)
+    parser.add_argument('--imgsz',type=int,default=640)
     args = parser.parse_args()
+    if not 0 < args.confidence <= 1 or not 32 <= args.imgsz <= 2048: parser.error('Confidenza o risoluzione non valida')
     layout = LayoutStore(args.layout_file)
     call = None
     if args.bridge:
         from arduino.app_utils import Bridge
         call = Bridge.call
     rt = RTService(call)
+    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
     with ThreadingHTTPServer((args.host,args.port),handler) as server:
         server.rt = rt
         server.layout = layout
+        server.vision = vision
         rt.start()
         print(f'CrossSense: http://{args.host}:{args.port}',flush=True)
         try:
+            vision.start()
             if on_ready is not None: on_ready(server)
             server.serve_forever()
-        finally: rt.stop.set()
+        finally:
+            vision.stop.set()
+            rt.stop.set()
 
 
 if __name__ == '__main__': main()
