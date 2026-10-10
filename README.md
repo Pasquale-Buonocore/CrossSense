@@ -209,7 +209,7 @@ Riferimenti: [manuale UNO Q](https://docs.arduino.cc/tutorials/uno-q/user-manual
 
 ## Stato attuale e prossimi passi
 
-È disponibile l'app Arduino App Lab di diagnostica Bridge in `apps/crosssense-env`, senza GPIO attivi. I documenti di ambiente registrano acquisizione IMX219 su UNO Media Carrier e comunicazione Bridge verificate sulla scheda; non sono state ripetute durante questo aggiornamento. Il manifest in radice resta da completare; AI, tracking, conteggi, dashboard, controllo semaforico e stime del rischio sono da implementare.
+Sono disponibili la dashboard Demo/Hardware e l’app RT Bridge in `firmware/`: ricevitore STM32 `crosssense_update`, validazione, buffer atomico e watchdog. L’app RT mantiene LED3/LED4 rossi in modalità protetta; macchina semaforica, AI/tracking, conteggi e stime del rischio restano da implementare. La prova LED precedente è conservata in `apps/crosssense-led-counter/`, la diagnostica senza GPIO in `apps/crosssense-env/`. Vedi [avvio dell’app RT](firmware/README.md). I documenti di ambiente registrano acquisizione IMX219 e comunicazione Bridge verificate sulla scheda.
 
 Per la demo partiremo da rilevamento → segnalazione → conteggio, poi aggiungeremo adattamento e allerte. Mostreremo un passaggio normale, un pedone fermo, direzioni opposte e un veicolo in avvicinamento, misurando latenza, falsi allarmi e continuità della protezione. Le prove si svolgeranno sul plastico e in ambiente controllato.
 
@@ -238,7 +238,7 @@ Avviare un'app con sketch carica nuovo firmware MCU. Arresto:
 python3 scripts/board.py shell 'arduino-app-cli app stop /home/arduino/ArduinoApps/crosssense-env'
 ```
 
-L'ambiente locale di base non richiede pacchetti esterni. Visione e dashboard saranno aggiunte dopo benchmark e scelta del runtime; l'SDK `arduino.app_utils` viene usato nel runtime App Lab sulla scheda, non nel venv del Mac.
+L'ambiente locale di base non richiede pacchetti esterni. La dashboard usa la libreria standard Python; la visione richiede ancora benchmark e scelta del runtime; l'SDK `arduino.app_utils` viene usato nel runtime App Lab sulla scheda, non nel venv del Mac.
 
 ## Documenti
 

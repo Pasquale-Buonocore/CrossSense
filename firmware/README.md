@@ -1,4 +1,4 @@
-Responsabile Pasquale: STM32 real-time, controller, tempi, priorità, watchdog, protezione e allarmi. Contratto delle osservazioni condiviso con Gaetano in `protocol/`. L’app di smoke test in `apps/crosssense-env` non contiene questa logica.
+# CrossSense RT Bridge
 
 Il [piano degli step e punto di ripresa](docs/README.md) e lo [storico delle decisioni e verifiche](docs/history.md) sono conservati in `firmware/docs`. Step 1 completato con verifiche native; step 2 in discussione prima dell'implementazione.
 
@@ -36,40 +36,51 @@ Nella console Python attendere `LED_OK ... mcu_changes=...` e verificare l'alter
 
 ## Prova Linux -> Bridge -> STM32
 
-Questa cartella contiene ora un'app Arduino App Lab per UNO Q:
+Il firmware espone `crosssense_update(String) -> String` con il formato di
+`protocol/bridge-v1.md`. Valida il frame completo prima del deposito, mantiene
+un solo buffer, rifiuta dati incoerenti, frame vecchi e immagini scadute.
+I duplicati identici confermano la ricezione senza riapplicare richieste o
+rinnovare il watchdog; solo `age_ms` può differire. Timestamp e sequenze
+vengono controllati anche attraverso messaggi di indisponibilità; wrap uint32
+supportato. La risposta distingue ricezione e frame applicato dal loop.
 
-```text
-firmware/
-├── app.yaml
-├── python/main.py
-└── sketch/
-    ├── sketch.ino
-    └── sketch.yaml
+Le richieste sono memorizzate su fronte false → true; accessible include
+pedestrian. Il watchdog usa età immagine + 250 ms di budget + tempo MCU,
+con deadline 1000 ms. La sola durata RPC misurata da Linux non garantisce
+il limite di consegna sulla MCU.
+
+**Modalità di integrazione protetta:** LED3 (veicoli) e LED4 (pedoni) sono
+entrambi rossi. Con dati validi la fase è `PROTECTED_STOP`, altrimenti `FAULT`
+con `NO_DATA`, `INVALID_DATA` o `TIMEOUT`. Residuo null, buzzer/beacon false,
+stime/allarmi vuoti. Le richieste restano pendenti e non aprono il verde.
+Non sono ancora implementati macchina semaforica, stime cinematiche,
+attuatori esterni o camera/inferenza. Nessun altro RPC può forzare i GPIO.
+
+## Preparazione e caricamento
+
+Il pacchetto include una copia della dashboard ottenuta dalle sorgenti,
+senza mantenere una seconda versione nel repository:
+
+```sh
+python3 scripts/package_rt.py /tmp/crosssense-rt-bridge
+python3 scripts/board.py push /tmp/crosssense-rt-bridge /home/arduino/ArduinoApps/
+python3 scripts/board.py shell 'TMPDIR=/tmp arduino-app-cli app start /home/arduino/ArduinoApps/crosssense-rt-bridge'
 ```
 
-Linux definisce la sequenza in `python/main.py` e invia un comando RPC
-`Bridge.call("crosssense_set_led", led, color)` alla STM32 per ogni passo.
-La STM32 controlla soltanto i due LED RGB integrati, LED3 e LED4; non contiene
-una sequenza autonoma. Non servono cablaggi. LOW accende e HIGH spegne.
+L'avvio compila e carica lo sketch STM32; cambia il firmware attivo sulla
+scheda. Le altre app sono conservate. Dipendenze del profilo: ArduinoJson
+7.4.3 e RouterBridge 0.4.3 con dipendenze transitive esplicite. Il primo
+avvio può richiedere download. Lo sketch usa `provide_safe` per mantenere
+il buffer e il loop sullo stesso thread.
 
-Il comando seleziona LED 3 o 4 e colore 1=rosso, 2=verde, 3=blu. Prima di
-accendere il canale selezionato, la STM32 spegne tutti gli altri. Il comando
-(0, 0) spegne entrambi i LED. Parametri non validi restituiscono -1 senza
-modificare le uscite. La risposta valida vale `led * 10 + color`, ad esempio
-31 per LED3 rosso; viene inviata dopo l'applicazione del comando.
+Aprire `http://IP-DELLA-SCHEDA:8081` e scegliere **Hardware**. Il servizio
+scambia dati anche senza browser: in assenza di visione invia osservazioni
+invalide e riceve la telemetria reale del controller protetto. L'API non
+ha autenticazione; la porta è esposta sulla rete locale per la demo.
 
-La STM32 conserva anche `ledChangeCount`. Linux lo legge dopo ogni comando
-con `Bridge.call("crosssense_get_led_change_count")` e lo stampa come
-`mcu_changes`. Il contatore aumenta una volta per cambio di stato: il primo
-LED acceso vale 1, passare a un altro LED/colore aggiunge 1 e spegnere un
-LED acceso aggiunge 1. Ripetere lo stesso comando, leggere il contatore o
-inviare parametri invalidi non lo incrementa. I sei canali spenti all'avvio
-valgono 0; il contatore si azzera al riavvio dello sketch/MCU. Non è salvato
-in memoria permanente. Il valore conta stati comandati, senza sensori ottici.
+## Verifica locale
 
-Il callback usa `Bridge.provide_safe`, disponibile in RouterBridge 0.4.3,
-per eseguire sul thread del loop. Il loop restituisce il controllo ogni
-10 ms al servizio RPC e non avanza autonomamente i LED.
+Con ArduinoJson disposnibile:
 
 La sequenza predefinita alterna LED3 rosso, LED4 rosso, LED3 verde,
 LED4 verde, LED3 blu, LED4 blu. Linux attende 0,5 secondi dopo ogni conferma.
@@ -89,30 +100,6 @@ LED_OK step=1 led=3 color=rosso ack=31 mcu_changes=1 roundtrip_ms=...
 LED_OK step=2 led=4 color=rosso ack=41 mcu_changes=2 roundtrip_ms=...
 ```
 
-La risposta conferma che la MCU ha eseguito la scrittura GPIO; il controllo
-visivo verifica che il LED sia effettivamente acceso. `roundtrip_ms` misura
-il tempo totale delle due RPC (comando e lettura contatore). Se fallisce la
-lettura del contatore, Python riprova lo stesso passo: la MCU non conta due
-volte il medesimo stato.
-
-Per provare che è Linux a decidere la sequenza, cambia soltanto `SEQUENCE`
-in Python, ad esempio `[(3, 1), (0, 0), (4, 3), (0, 0)]`, o cambia
-`STEP_SECONDS` a `1.0`, poi premi Run. Non serve modificare lo sketch.
-
-Se Linux si arresta o il collegamento si interrompe, la sequenza si ferma
-e la MCU mantiene l'ultimo stato ricevuto. Questa prova non implementa un
-watchdog di comunicazione. All'avvio dello sketch entrambi i LED sono spenti
-fino al primo comando valido.
-
-Compilazione con il core UNO Q, caricamento e comunicazione sulla scheda
-restano da verificare: ADB non rilevava dispositivi USB durante la preparazione.
-
-Verifica locale riuscita con lo sketch compilato tramite GCC su PC e GPIO/
-Bridge simulati, collegato alla sequenza Python: avvio con LED spenti,
-selezione dei sei canali, comando di spegnimento, rifiuto dei parametri
-invalidi, ripetizione della sequenza e tentativi dopo timeout o risposta
-inattesa, lettura del contatore MCU e assenza di doppi incrementi durante
-i tentativi ripetuti. Questa verifica non sostituisce la compilazione con il core UNO Q
-né la prova del trasporto Bridge reale.
-
-Questa prova non implementa ancora il controller semaforico.
+Copertura MCU: buffer atomico/BUSY, frame applicato, duplicati e contenuto
+alterato, timestamp, frame vecchi/scaduti, fronti richieste, nuovo stream,
+watchdog, wrap sequenze/clock, dati malformati e uscite protette.

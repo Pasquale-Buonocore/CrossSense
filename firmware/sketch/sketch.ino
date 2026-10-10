@@ -1,59 +1,26 @@
-// Arduino UNO Q: Linux chooses the LED; the MCU only applies commands.
-// Built-in RGB LEDs are active LOW. No external wiring is required.
-#include "crosssense_types.h"  // Step 1: compile the controller data model.
+// Bridge v1 receiver. Controller commissioning mode: both built-in RGB LEDs red.
 #include <Arduino_RouterBridge.h>
+#include "rt_protocol.h"
 
-const int LED_PINS[] = {
-  LED3_R, LED3_G, LED3_B,
-  LED4_R, LED4_G, LED4_B
-};
+CrossSense::RTCore rt;
+const int LED_PINS[] = {LED3_R,LED3_G,LED3_B,LED4_R,LED4_G,LED4_B};
 
-int currentLedState = 0;  // 0=off, otherwise led*10+color.
-unsigned long ledChangeCount = 0;
-
-void allLedsOff() {
-  for (unsigned int i = 0; i < 6; ++i) {
-    digitalWrite(LED_PINS[i], HIGH);
-  }
-}
-
-// RPC: led=3 or 4; color=1 red, 2 green, 3 blue. (0, 0) turns all off.
-// Returns led*10+color after applying the command, or -1 for invalid values.
-int crosssense_set_led(int led, int color) {
-  const bool turnOff = led == 0 && color == 0;
-  if (!turnOff && ((led != 3 && led != 4) || color < 1 || color > 3)) {
-    return -1;
-  }
-
-  const int nextState = led * 10 + color;
-  if (nextState != currentLedState) {
-    allLedsOff();
-    if (!turnOff) {
-      digitalWrite(LED_PINS[(led - 3) * 3 + (color - 1)], LOW);
-    }
-    currentLedState = nextState;
-    ++ledChangeCount;
-  }
-  return nextState;
-}
-
-// Linux reads a counter maintained by the MCU, not a Python-side estimate.
-unsigned long crosssense_get_led_change_count() {
-  return ledChangeCount;
+String crosssense_update(String frameJson) {
+  JsonDocument response;
+  rt.update(frameJson.c_str(),frameJson.length(),uint32_t(millis()),response);
+  char buffer[CrossSense::PayloadLimit+1];
+  serializeJson(response,buffer,sizeof(buffer));
+  return String(buffer);
 }
 
 void setup() {
-  for (unsigned int i = 0; i < 6; ++i) {
-    pinMode(LED_PINS[i], OUTPUT);
-    digitalWrite(LED_PINS[i], HIGH);
-  }
+  for (int pin:LED_PINS) {pinMode(pin,OUTPUT);digitalWrite(pin,HIGH);}
+  digitalWrite(LED3_R,LOW);digitalWrite(LED4_R,LOW);
   Bridge.begin();
-  // RouterBridge dispatches this callback on the main loop thread.
-  Bridge.provide_safe("crosssense_set_led", crosssense_set_led);
-  Bridge.provide_safe("crosssense_get_led_change_count", crosssense_get_led_change_count);
+  Bridge.provide_safe("crosssense_update",crosssense_update);
 }
 
 void loop() {
-  // No autonomous sequence. RouterBridge's loop hook services safe RPCs.
+  rt.tick(uint32_t(millis()));
   delay(10);
 }

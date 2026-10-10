@@ -1,6 +1,6 @@
 # Interfaccia Bridge v1: un solo scambio
 
-**Contratto v1: adapter Linux/dashboard implementato in `dashboard/rt.py`; RPC e controller STM32 ancora da implementare e verificare sulla scheda.** Questa revisione sostituisce la proposta precedente. Pasquale sviluppa STM32, Gaetano produce le osservazioni e Matteo integra il servizio Linux e la dashboard.
+**Contratto v1: adapter Linux/dashboard implementato in `dashboard/rt.py`; ricevitore RPC STM32 implementato in `firmware/sketch/rt_protocol.h` in modalità protetta; macchina semaforica ancora da implementare.** Questa revisione sostituisce la proposta precedente. Pasquale sviluppa STM32, Gaetano produce le osservazioni e Matteo integra il servizio Linux e la dashboard.
 
 ## Una sola funzione
 

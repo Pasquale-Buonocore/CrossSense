@@ -1,6 +1,6 @@
 # Contratto Linux-STM32: proposta semplice
 
-Il riferimento da concordare è [Bridge v1: un solo scambio](bridge-v1.md). Questa revisione sostituisce la precedente specifica funzionale v0.2 e la proposta con più RPC. L’adapter Linux/dashboard è implementato in `dashboard/rt.py`; la RPC del controller STM32 resta da implementare e verificare sulla scheda.
+Il riferimento da concordare è [Bridge v1: un solo scambio](bridge-v1.md). Questa revisione sostituisce la precedente specifica funzionale v0.2 e la proposta con più RPC. L’adapter Linux/dashboard è implementato in `dashboard/rt.py`; il ricevitore STM32 è implementato in `firmware/sketch/rt_protocol.h` in modalità protetta; la macchina semaforica resta da implementare.
 
 ```text
 Linux -> crosssense_update(frame_json) -> STM32

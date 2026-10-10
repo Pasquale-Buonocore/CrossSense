@@ -49,7 +49,7 @@ python3 dashboard/server.py --bridge --port 8080
 
 Senza `--bridge` la modalità Hardware rimane disconnessa. Il firmware deve
 esporre `crosssense_update(String) -> String` secondo `protocol/bridge-v1.md`:
-la prova LED in `firmware/` **non espone ancora questa RPC**. Non viene
+l’app `firmware/` espone questa RPC in modalità protetta. La prova LED precedente è in `apps/crosssense-led-counter/`. Non viene
 caricato né modificato firmware dalla dashboard.
 
 Il servizio `rt.py` possiede il Bridge e scambia JSON compatti a 5 Hz con
