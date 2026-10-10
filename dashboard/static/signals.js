@@ -16,7 +16,7 @@ class TrafficSignals {
       this.positions[id]=normalizeSignalPosition(saved?.[id],fallback);
       const label=id==='vehicles'?'Veicoli':id==='ped-left'?'Pedoni SX':'Pedoni DX';
       const node=document.createElement('button');node.type='button';node.className='traffic-signal';node.dataset.signal=id;
-      node.innerHTML=`<span class="traffic-housing"><i data-light="red"></i>${id==='vehicles'?'<i data-light="amber"></i>':''}<i data-light="green"></i></span><span class="traffic-label">${label}<small>Stato sconosciuto</small></span>`;
+      node.innerHTML=`<span class="traffic-housing"><i data-light="red"></i><i data-light="amber"></i><i data-light="green"></i></span><span class="traffic-label">${label}<small>Stato sconosciuto</small></span>`;
       node.disabled=true;node.addEventListener('pointerdown',e=>{
         if(!this.edit.checked||e.button!==0)return;
         this.select.value=id;this.syncInputs();this.drag={id,pointerId:e.pointerId};node.setPointerCapture(e.pointerId);e.preventDefault();
@@ -45,7 +45,7 @@ class TrafficSignals {
   render(outputs){
     for(const [id,node]of Object.entries(this.nodes)){
       const value=id==='vehicles'?outputs?.vehicle:outputs?.pedestrian;
-      const valid=(id==='vehicles'?['red','amber','green']:['red','green']).includes(value);
+      const valid=['red','amber','green'].includes(value);
       node.querySelectorAll('[data-light]').forEach(l=>l.classList.toggle('on',valid&&l.dataset.light===value));
       const state=valid?{red:'Rosso',amber:'Giallo',green:'Verde'}[value]:'Stato sconosciuto';
       node.querySelector('small').textContent=state;node.setAttribute('aria-label',`${id==='vehicles'?'Semaforo veicoli':id==='ped-left'?'Semaforo pedoni sinistra':'Semaforo pedoni destra'}: ${state}`);
