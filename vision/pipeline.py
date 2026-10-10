@@ -61,6 +61,7 @@ class VisionService:
         self.current,self.received = None,None
         self.events.tracks.clear()
         self.events.stopped = []
+        self.events.waiting = {'waiting_left': 0, 'waiting_right': 0}
 
     def configure(self, data):
         with self.lock:

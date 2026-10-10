@@ -81,7 +81,7 @@ class VisionView {
       const obs=fresh?frame.observation:null;
       document.getElementById('occupied').textContent=obs?.crossing==='occupied'?'Occupato':obs?.valid&&obs.crossing==='clear'?'Libero':'Sconosciuto';
       document.getElementById('occupancy-detail').textContent=obs?.valid?'Osservazione YOLO corrente':obs?(frame.detections.length>8?'Più di 8 oggetti · osservazione RT invalida':'Tracking non disponibile'):'Nessuna osservazione YOLO fresca';
-      const count=zone=>frame?.detections.filter(d=>d.class==='pedestrian'&&d.zone===zone).length??0;
+      const count=zone=>data?.metrics?.waiting?.[zone]??0;
       document.getElementById('waiting').textContent=obs?.valid?count('waiting_left')+count('waiting_right'):'—';
       document.getElementById('wait-detail').textContent=obs?.valid?`Sinistra ${count('waiting_left')} · Destra ${count('waiting_right')}`:'Conteggi non disponibili';
       if(!frame&&!this.editing&&this.serial===null&&!this.image.src.endsWith('/api/vision/reference.jpg'))this.image.src='/api/vision/reference.jpg';

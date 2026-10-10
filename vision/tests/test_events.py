@@ -7,6 +7,23 @@ def person(zone, key=1, x=50):
 
 
 class EventTests(unittest.TestCase):
+    def test_waiting_excludes_pedestrians_arriving_from_crossing(self):
+        e=CrossingEvents()
+        e.update(1,0,[person('waiting_left',1),person('crossing',2)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':1,'waiting_right':0})
+        e.update(1,100,[person('crossing',1),person('waiting_right',2),person('waiting_right',3)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':0,'waiting_right':1})
+        e.update(1,200,[person('waiting_right',1),person('waiting_right',2),person('waiting_right',3)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':0,'waiting_right':1})
+        e.update(1,300,[person('waiting_left',1)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':1,'waiting_right':0})
+        e.update(2,0,[person('waiting_right',1)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':0,'waiting_right':1})
+        e.update(2,100,[person('outside',2)],100,100)
+        e.update(2,200,[person('crossing',2)],100,100)
+        e.update(2,300,[person('waiting_left',2)],100,100)
+        self.assertEqual(e.snapshot()['waiting'],{'waiting_left':0,'waiting_right':0})
+
     def test_complete_directions_dedup_and_replay_reset(self):
         e=CrossingEvents()
         for key,origin,destination in [(1,'waiting_left','waiting_right'),(2,'waiting_right','waiting_left')]:
