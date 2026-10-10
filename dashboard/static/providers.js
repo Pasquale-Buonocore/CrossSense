@@ -43,9 +43,27 @@ class DemoProvider {
   dispose() {}
 }
 class HardwareProvider {
-  // Deliberately disconnected until a transport and validated contract exist.
-  snapshot(){return {source:'hardware',outputs:null,phase:0,elapsed:0,seq:0,paused:false,scenario:'offline',left:null,right:null,completed:null,waitSamples:[],extended:false,phases};}
-  tick(){return this.snapshot();}
-  request(){return {status:'rejected',reason:'API hardware non configurata'};}
-  dispose() {}
+  constructor(emit=()=>{}, transport=globalThis.fetch?.bind(globalThis), clock=()=>Date.now()) {
+    this.emit=emit;this.transport=transport;this.clock=clock;this.data=null;this.received=0;this.disposed=false;this.busy=false;
+  }
+  snapshot(){
+    const d=this.data,s=d?.state;
+    const fresh=!!(d?.connected&&s&&this.clock()-this.received+(d.age_ms??1000)<1000);
+    const map={VEHICLE_GREEN:0,VEHICLE_YELLOW:1,ALL_RED_TO_PED:1,PED_GREEN:2,PED_CLEARANCE:3,ALL_RED_TO_VEH:3,PROTECTED_STOP:3,FAULT:3};
+    const lights={RED:'red',YELLOW:'amber',GREEN:'green',OFF:'off'};
+    return {source:'hardware',outputs:fresh?{vehicle:lights[s.vehicle_light],pedestrian:lights[s.pedestrian_light]}:null,phase:map[s?.phase]??0,elapsed:0,seq:s?.applied_frame??0,paused:false,scenario:fresh?'hardware':'offline',left:null,right:null,completed:null,waitSamples:[],extended:false,phases,rt:fresh?s:null,remaining:fresh&&s.remaining_ms!==null?Math.max(0,Math.ceil((s.remaining_ms-(this.clock()-this.received))/1000)):null};
+  }
+  async tick(){
+    if(this.busy||this.disposed||!this.transport)return this.snapshot();
+    this.busy=true;
+    try{const response=await this.transport('/api/rt',{cache:'no-store'});if(!response.ok)throw Error('HTTP');const data=await response.json();if(!this.disposed){this.data=data;this.received=this.clock();}}
+    catch(e){this.data=null;}finally{this.busy=false;}
+    return this.snapshot();
+  }
+  async request(type,requestId){
+    if(this.snapshot().scenario==='offline'||!this.transport)return {status:'rejected',reason:'Telemetria non disponibile'};
+    try{const response=await this.transport('/api/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,request_id:requestId})});const result=await response.json();return response.ok?result:{status:'rejected',reason:result.error};}
+    catch(e){return {status:'rejected',reason:'Collegamento interrotto'};}
+  }
+  dispose(){this.disposed=true;this.data=null;}
 }

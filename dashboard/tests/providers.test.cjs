@@ -9,7 +9,7 @@ demo.request('pedestrian','r1');assert.equal(demo.snapshot().pending.length,1);
 demo.setScenario('offline');const before=demo.snapshot().seq;demo.tick();assert.equal(demo.snapshot().seq,before);assert.equal(demo.request('pedestrian','r2').status,'rejected');
 demo.setScenario('normal');assert.equal(demo.snapshot().pending.length,0);
 demo.setScenario('stopped');for(let i=0;i<60;i++)demo.tick();assert.equal(demo.snapshot().phase,3);assert.equal(demo.snapshot().elapsed,0);
-const hardware=new HardwareProvider();assert.equal(hardware.snapshot().completed,null);assert.equal(hardware.request('pedestrian','r3').status,'rejected');for(let i=0;i<10;i++)hardware.tick();assert.equal(hardware.snapshot().seq,0);
+const hardware=new HardwareProvider(()=>{},null);assert.equal(hardware.snapshot().completed,null);for(let i=0;i<10;i++)hardware.tick();assert.equal(hardware.snapshot().seq,0);
 const fresh=new DemoProvider();assert.equal(fresh.snapshot().completed,0);
 console.log('Provider checks passed: deduplication, offline, clearance protection, hardware isolation.');
 const outputsDemo=new DemoProvider();
@@ -26,3 +26,12 @@ assert.equal(outputsDemo.snapshot().outputs.pedestrian,'red');
 outputsDemo.setScenario('offline');assert.equal(outputsDemo.snapshot().outputs,null);
 assert.equal(hardware.snapshot().outputs,null);
 console.log('Commanded outputs checked for all phases and missing telemetry.');
+
+(async()=>{
+assert.equal((await hardware.request('pedestrian','r3')).status,'rejected');
+let now=0;
+const live=new HardwareProvider(()=>{},async()=>({ok:true,json:async()=>({connected:true,age_ms:0,state:{phase:'PED_CLEARANCE',vehicle_light:'RED',pedestrian_light:'RED',remaining_ms:null,applied_frame:42}})}),()=>now);
+await live.tick();assert.equal(live.snapshot().outputs.vehicle,'red');assert.equal(live.snapshot().remaining,null);
+now=1000;assert.equal(live.snapshot().outputs,null);assert.equal((await live.request('pedestrian','x')).status,'rejected');
+console.log('Hardware freshness and unavailable countdown checked.');
+})().catch(e=>{console.error(e);process.exitCode=1;});
