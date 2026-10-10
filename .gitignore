@@ -8,6 +8,8 @@ __pycache__/
 build/
 dist/
 *.mp4
+!simulation/output/
+!simulation/output/*
 *.avi
 *.mov
 *.mkv
