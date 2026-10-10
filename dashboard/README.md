@@ -1,1 +1,1 @@
-Responsabile C: telemetria in sola lettura, stato MCU, contatori e log. Gli eventuali comandi manuali saranno richieste al controller, mai scritture dirette ai GPIO.
+Attività per i due jolly, assegnate secondo le priorità: integrazione Linux–Bridge, telemetria in sola lettura, stato MCU, contatori e log. Gli eventuali comandi manuali saranno richieste al controller, mai scritture dirette ai GPIO. Coordinamento con Gaetano e Pasquale.

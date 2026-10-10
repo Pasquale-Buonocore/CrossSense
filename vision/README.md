@@ -1,1 +1,1 @@
-Responsabile A: camera/video → detection → tracking → ROI → osservazioni. Benchmark sulla UNO Q prima di scegliere modello e risoluzione. Contratto condiviso in `protocol/`.
+Responsabile Gaetano: YOLO26n, camera/video → detection → tracking con ID persistenti → ROI → osservazioni. Benchmark sulla UNO Q per verificare modello e risoluzione. Contratto condiviso con Pasquale in `protocol/`; supporto dei jolly per camera e calibrazione.

@@ -1,1 +1,1 @@
-Responsabile D: scenari ripetibili, test di guasto e confronto con ciclo fisso. Prima replay deterministico; SUMO è una seconda priorità.
+Attività per i due jolly, assegnate secondo le priorità: hardware, scenari ripetibili, test di guasto, replay e confronto con ciclo fisso. Prima replay deterministico; SUMO è una seconda priorità. Coordinamento con Gaetano e Pasquale.

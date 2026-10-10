@@ -1,31 +1,30 @@
 # Quattro persone, 30 ore
 
-| Persona | Responsabilità principale | Primo risultato integrabile | Confine di lavoro |
+| Persona | Responsabilità | Primo risultato integrabile | Confine di lavoro |
 |---|---|---|---|
-| A — Visione | Camera, modello, tracking, ROI, calibrazione | Snapshot validi/unknown da video o camera | `vision/`, asset locali |
-| B — Firmware | FSM, LED/buzzer, protezione, watchdog, rischio | Ciclo completo da osservazioni sintetiche, test di timeout | `firmware/`, sketch app finale |
-| C — Linux e dashboard | Bridge adapter, telemetria, contatori, UI | Stato reale MCU e log eventi, anche senza camera | `dashboard/`, Python app finale |
-| D — Hardware e validazione | Plastico, cablaggio, scenari, replay e demo | Schema pin verificato, scenari deterministici e test conflitti | `simulation/`, documenti hardware |
+| Gaetano — Visione | YOLO26n, tracking, ID persistenti, ROI e osservazioni | Snapshot validi/unknown da video o camera | `vision/`, asset locali |
+| Pasquale — STM32 / real-time | FSM, LED/buzzer, protezione, watchdog e rischio | Ciclo completo da osservazioni sintetiche, test di timeout | `firmware/`, sketch app finale |
+| Due persone jolly | Supporto flessibile su integrazione Linux–Bridge, dashboard, hardware, calibrazione, scenari e validazione | Sbloccare le dipendenze e verificare l’integrazione | `dashboard/`, `simulation/`, Python app finale e documenti hardware |
 
-La divisione è per persone del team; non sono stati avviati agenti automatici. Persona C integra i contributi, persona B valida qualsiasi variazione dei tempi e del protocollo.
+Gaetano e Pasquale concordano il [contratto delle osservazioni](../protocol/README.md): coordinate, timestamp, validità, occupazione e tracce perse. Pasquale valida le variazioni dei tempi del controller. I due jolly si assegnano di volta in volta le attività più urgenti, indicando chi segue ogni integrazione; non hanno aree esclusive fisse.
 
 ## Sequenza
 
-| Ore | A | B | C | D | Traguardo comune |
-|---|---|---|---|---|---|
-| 0–2 | Camera e frame/replay | Smoke Bridge e mappa GPIO | Ambiente e contratto | Alimentazione, carrier, componenti | Scheda accessibile, camera o fallback identificato |
-| 2–6 | Benchmark detector + ROI | FSM con input sintetici | Adapter e telemetria base | Cablaggio e test invarianti | Protocollo e parametri congelati |
-| 6–10 | Tracking e permanenza | Occupazione, watchdog e allarmi | Prima integrazione e dashboard | Esecuzione scenari 1/2/3/5 | Ciclo completo detection→LED |
-| 10–18 | Calibrazione e direzione | Velocità/TTC con storico valido | Contatori e latenza | Collisione, guasti e reset | MVP completo e verificato |
-| 18–24 | Rifinitura robustezza | Priorità e sgombero massimo | UI e log export | Confronto ciclo fisso; SUMO se c'è margine | Tutti gli scenari MVP ripetibili |
-| 24–27 | Freeze e prove offline | Freeze firmware | Freeze app e backup | Plastico e narrazione demo | Nessuna nuova funzione |
-| 27–30 | Supporto demo | Supporto demo | Supporto demo | Prova generale e pitch | Buffer per guasti e presentazione |
+| Ore | Gaetano | Pasquale | Attività disponibili per i due jolly | Traguardo comune |
+|---|---|---|---|---|
+| 0–2 | Camera e frame/replay | Smoke Bridge e mappa GPIO | Ambiente, contratto, alimentazione e componenti | Scheda accessibile, camera o fallback identificato |
+| 2–6 | Benchmark YOLO26n + ROI | FSM con input sintetici | Adapter, telemetria, cablaggio e test invarianti | Protocollo e parametri congelati |
+| 6–10 | Tracking, ID e permanenza | Occupazione, watchdog e allarmi | Prima integrazione, dashboard e scenari 1/2/3/5 | Ciclo completo detection→LED |
+| 10–18 | Coordinate calibrate e direzione | Velocità/TTC con storico valido | Supporto calibrazione, contatori, latenza, collisione, guasti e reset | MVP completo e verificato |
+| 18–24 | Rifinitura robustezza | Priorità e sgombero massimo | UI, log export, confronto ciclo fisso; SUMO se c’è margine | Tutti gli scenari MVP ripetibili |
+| 24–27 | Freeze e prove offline | Freeze firmware | Freeze app, backup, plastico e narrazione demo | Nessuna nuova funzione |
+| 27–30 | Supporto demo | Supporto demo | Prova generale, pitch e supporto dove necessario | Buffer per guasti e presentazione |
 
 ## Regole pratiche
 
 - Un solo responsabile compila/carica firmware sulla UNO Q alla volta. Caricare uno sketch può interrompere l'app in corso.
 - Gli altri sviluppano con replay e fixture condivise; evitare che più processi acquisiscano la stessa camera.
-- Protocollo e parametri modificati insieme e con review A/B/C; documentare mappa pin prima dei GPIO.
+- Protocollo e parametri modificati insieme e con review di Gaetano, Pasquale e del jolly che segue l’integrazione; documentare mappa pin prima dei GPIO.
 - Finestra di integrazione almeno ogni 2–3 ore, non a fine hackathon.
 - Se entro ora 2 non c'è un frame live, attivare replay in parallelo alla diagnosi hardware. Dichiarare la modalità usata.
 - Se entro ora 6 YOLO non sostiene la latenza necessaria, ridurre risoluzione/frequenza e misurare; concordare l'eventuale ripiego.

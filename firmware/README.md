@@ -1,1 +1,1 @@
-Responsabile B: controller STM32, tempi, priorità, watchdog, protezione e allarmi. L'app di smoke test in `apps/crosssense-env` non contiene questa logica.
+Responsabile Pasquale: STM32 real-time, controller, tempi, priorità, watchdog, protezione e allarmi. Contratto delle osservazioni condiviso con Gaetano in `protocol/`. L’app di smoke test in `apps/crosssense-env` non contiene questa logica.
