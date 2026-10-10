@@ -37,7 +37,7 @@ Copre duplicazione delle richieste pendenti, perdita telemetria, sgombero prolun
 
 L’anteprima usa `static/example-frame.jpg`, foto di riferimento fornita dal team, non un video live. `static/signals.js` disegna tre indicatori: pedoni sinistra/destra condividono `snapshot.outputs.pedestrian`; veicoli usa `snapshot.outputs.vehicle`. Questi valori rappresentano uscite comandate, non feedback elettrico. Il provider demo li genera dalla fase; il provider hardware disconnesso restituisce `null`, visualizzato come stato sconosciuto. L’adapter hardware dovrà mappare le uscite effettive MCU a questi campi solo con telemetria valida e fresca.
 
-Attivare **Posiziona semafori**, poi trascinare un indicatore oppure selezionarlo e cliccare sul frame. Sono disponibili coordinate X/Y percentuali e frecce della tastiera sull’indicatore (Shift per spostamenti maggiori). Le posizioni sono salvate in localStorage per browser e origine, mantengono l’allineamento al ridimensionamento e si possono ripristinare. Non vengono inviate al controller o condivise tra browser. La sostituzione con frame camera dovrà mantenere immagine e overlay nello stesso contenitore, senza ritaglio del frame.
+Attivare **Posiziona semafori**, poi trascinare un indicatore oppure selezionarlo e cliccare sul frame. Sono disponibili coordinate X/Y percentuali e frecce della tastiera sull’indicatore (Shift per spostamenti maggiori). Le posizioni sono salvate sul server e condivise da tutti i browser della stessa dashboard; mantengono l’allineamento al ridimensionamento e si possono ripristinare per tutti. I browser aggiornano la disposizione ogni 2 secondi; durante il posizionamento mantengono la propria modifica fino al salvataggio. Non vengono inviate al controller. La sostituzione con frame camera dovrà mantenere immagine e overlay nello stesso contenitore, senza ritaglio del frame.
 
 ## Adapter dashboard / RT implementato (Bridge v1)
 
@@ -97,3 +97,19 @@ node dashboard/tests/providers.test.cjs
 Le prove usano un Bridge simulato: formato, coerenza ROI, coordinate,
 ordinamento, nuovo flusso, impulsi richieste, errori, ritardi e scadenza cache.
 Non sostituiscono la verifica del trasporto e del controller sulla UNO Q.
+
+
+## Posizioni condivise
+
+`GET /api/signal-layout` restituisce `{positions, revision}`.
+`POST /api/signal-layout` salva una mappa parziale degli indicatori, ad esempio
+`{"ped-left":{"x":25.51,"y":53.09}}`. Ogni punto deve avere X tra 5 e 95,
+Y tra 12 e 88. Modifiche a indicatori diversi vengono unite; sullo stesso
+indicatore prevale l'ultimo salvataggio. Ripristina applica i valori iniziali
+a tutti i browser. Errori di salvataggio sono mostrati e ritentati.
+
+Il file persistente predefinito è `dashboard/.local/signal-layout.json`,
+separato dai file pubblici. `--layout-file /percorso/layout.json` permette
+un percorso diverso. Riavvio e aggiornamento dei sorgenti conservano il file.
+I vecchi salvataggi personali non vengono più usati. La disposizione della
+UNO Q è stata inizializzata con le posizioni presenti nel browser del team.
