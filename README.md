@@ -50,6 +50,8 @@ Importare lo ZIP in App Lab e avviare l’app. Il pacchetto contiene `app.yaml`,
 
 Il profilo 960/640 verificato in precedenza sul PC è storico. A 320 il collaudo sulla scheda ha contato 2/0/1/1/0 invece di 4/0/1/3/0: consultare i risultati effettivi del [collaudo UNO Q](docs/unoq-validation.md), senza attribuire al profilo attuale i conteggi del precedente. Il pacchetto finale con i fix del browser e della coda richieste è `dist/crosssense-unoq-480-320.zip`. Il controllo e la dashboard sono collaudati; le asserzioni di accuratezza non sono tutte superate.
 
+Aggiornamento dell'11 ottobre: i due video della demo attiva (`fotoRealVideo.mp4` e `postProcessingVideo.mp4`) sono stati riesportati dagli originali a **716×480**, con altezza effettiva 480p. La preview usa `frame_size=716`; il modello resta NCNN FP32 a 320. FP16 e il candidato INT8 non hanno dato un'accelerazione utile sulla UNO Q, e INT8 ha peggiorato i conteggi host. Questo aggiornamento non è incluso nello ZIP storico sopra. Misure, limiti e riproduzione in [quantizzazione e video 480p](docs/quantization.md).
+
 Il manifest alla radice è solo descrittivo: usare il pacchetto generato. La porta dell’app è 8080. Installazioni, build e download iniziali vanno eseguiti prima della prova senza Internet. Il runtime della visione disabilita rete e installazioni automatiche Ultralytics.
 
 `--standard-cycle` produce invece una prova sintetica separata di due cicli. Senza opzioni ciclo il pacchetto firmware rimane protetto. Le app in `apps/` sono diagnostiche storiche, non componenti della demo finale; avviarle sostituisce lo sketch sulla scheda.
