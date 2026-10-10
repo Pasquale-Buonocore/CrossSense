@@ -1,0 +1,3 @@
+# Nessuna dipendenza Python aggiuntiva per lo scaffold.
+# arduino.app_utils è fornito dall'ambiente Arduino App Lab sulla UNO Q.
+# Aggiungere e fissare qui le dipendenze effettivamente usate dopo la prova sulla scheda.
