@@ -1,49 +1,33 @@
-# Architettura prevista
+# Architettura CrossSense
 
-## Catena di elaborazione
+## Divisione del lavoro su Arduino UNO Q
+
+| Componente | Responsabilità prevista |
+| --- | --- |
+| Linux / Python | Camera, inferenza locale, tracking, conteggi, tempi adattivi e stime del rischio |
+| MCU / sketch Arduino | Luci del plastico, controllo delle combinazioni consentite e gestione della perdita di comunicazione |
+| Bridge RPC | Comandi da Python e conferma dello stato applicato dal MCU |
 
 ```text
-Camera / video di prova
-        ↓
-Linux: rilevamento → tracking → zone e attraversamenti
-        ↓
-Linux: politica semaforica + valutazione del rischio
-        ↓ Bridge RPC locale
-MCU: validazione del comando → controllo luci del plastico
-        ↓
-Conferma dello stato applicato → statistiche locali
+Camera → rilevamento → tracking → stato dell'attraversamento
+                                        ↓
+                          decisione su fasi e allerte
+                                        ↓ Bridge
+                              MCU → luci del plastico
 ```
 
-Il runtime Python e lo sketch sono organizzati secondo il [formato Arduino App Lab](https://github.com/arduino/arduino-app-cli/blob/main/docs/app-specification.md). La UNO Q combina [Linux e MCU](https://docs.arduino.cc/hardware/uno-q/); i due lati comunicano con [RouterBridge](https://github.com/arduino-libraries/Arduino_RouterBridge).
+La base attuale implementa solo la diagnostica: Python chiama `crosssense_status`, registrato nello sketch, e riceve `scaffold_ready`. Non esegue AI e non pilota GPIO. Riferimento: [Arduino RouterBridge](https://github.com/arduino-libraries/Arduino_RouterBridge).
 
-## Moduli da sviluppare in python/crosssense/
+## Regole da implementare
 
-| Modulo previsto | Responsabilità |
-| --- | --- |
-| perception | Acquisizione, inferenza locale e qualità delle rilevazioni |
-| tracking | Identificativi temporanei e traiettorie di pedoni/veicoli |
-| crossing | Zone di attesa/strisce, occupazione, ingressi, uscite e direzioni |
-| controller | Tempi adattivi e transizioni della macchina a stati |
-| risk | Stime calibrate di velocità, conflitto e arresto |
-| telemetry | Eventi, metriche e risultati aggregati |
-| bridge | Comandi, heartbeat e conferma dello stato MCU |
+- Distinguere zone di attesa, strisce e strada di avvicinamento; contare i transiti completi per direzione e gestire i ritorni.
+- Prevedere fasi veicoli, transizione, attraversamento pedoni e sgombero. Durante lo sgombero, mantenere il rosso ai veicoli finché le strisce risultano occupate.
+- Tenere l'allerta lampeggiante separata dalle fasi semaforiche.
+- La perdita di video, tracking o Bridge non equivale a strisce libere. Definire avvio, timeout di comunicazione e stato di guasto prima di attivare le uscite.
+- Eseguire inferenza e controllo localmente; conservare per default eventi e statistiche, senza archiviazione continua del video.
 
-Sono responsabilità progettate: nella base iniziale è implementato soltanto `config.py`.
+## Decisioni ancora aperte
 
-## Macchina a stati da implementare
+Camera e campo visivo; modello e classi effettive; pin, driver e alimentazione delle luci; limiti delle fasi e soglie di allerta. Calibrare la geometria prima di mostrare velocità in m/s o distanze in metri. Annotare le versioni App Lab/core e le prestazioni misurate sulla variante UNO Q disponibile.
 
-| Stato | Veicoli | Pedoni | Condizione di uscita |
-| --- | --- | --- | --- |
-| VEHICLE_FLOW | Verde | Rosso | Richiesta pedoni e tempo minimo veicoli completato |
-| VEHICLE_CLEARANCE | Giallo, poi rosso | Rosso | Tempo di transizione completato |
-| PEDESTRIAN_CROSSING | Rosso | Verde | Durata pedonale prevista completata |
-| PEDESTRIAN_CLEARANCE | Rosso | Rosso | Strisce libere per una finestra stabile di conferma |
-| FAULT | Stato di guasto del plastico da definire | Rosso | Ripristino verificato e transizione esplicita |
-
-L'allerta lampeggiante è un'uscita separata dalle fasi, così non abilita il verde veicoli. La perdita del video/tracking o della comunicazione non deve essere interpretata come strisce libere. Non introdurre un timeout che riapra automaticamente ai veicoli durante un'occupazione incerta; passare a una condizione di guasto definita per la demo.
-
-I limiti delle fasi, il timeout heartbeat, l'isteresi e le soglie saranno configurati dopo misure sul plastico. Nessun valore operativo è deciso nello scaffold.
-
-## Dati e offline
-
-Usare un clock monotono per durate e latenza. Tenere gli identificativi di tracking nella sessione; conservare per default solo eventi e aggregati. Video di test e pesi restano locali, con manifest della provenienza. Non usare servizi cloud nel percorso di rilevamento e attuazione.
+Aggiungere moduli, dipendenze e nuovi documenti quando servono all'implementazione. Per le prove confrontare video annotati e comportamento del plastico, includendo pedoni fermi, gruppi, traffico variabile e perdita della comunicazione.

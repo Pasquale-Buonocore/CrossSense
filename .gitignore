@@ -1,28 +1,16 @@
-# Python and local tooling
 __pycache__/
 *.py[cod]
 .venv/
-venv/
 .cache/
-.pytest_cache/
 .env
 .env.*
 !.env.example
-.DS_Store
-Thumbs.db
-
-# Local configuration, datasets, recordings and generated results
-config/crossing.local.json
-data/raw/
-data/processed/
-data/runs/
+build/
+dist/
 *.mp4
 *.avi
 *.mov
 *.mkv
-
-# Downloaded model weights and build artifacts
-models/weights/
-build/
-dist/
-*.zip
+*.pt
+*.onnx
+*.tflite
