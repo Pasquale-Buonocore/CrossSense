@@ -31,3 +31,9 @@ node dashboard/tests/providers.test.cjs
 ```
 
 Copre duplicazione delle richieste pendenti, perdita telemetria, sgombero prolungato e isolamento della modalità hardware.
+
+## Semafori sul frame
+
+L’anteprima usa `static/example-frame.jpg`, foto di riferimento fornita dal team, non un video live. `static/signals.js` disegna tre indicatori: pedoni sinistra/destra condividono `snapshot.outputs.pedestrian`; veicoli usa `snapshot.outputs.vehicle`. Questi valori rappresentano uscite comandate, non feedback elettrico. Il provider demo li genera dalla fase; il provider hardware disconnesso restituisce `null`, visualizzato come stato sconosciuto. L’adapter hardware dovrà mappare le uscite effettive MCU a questi campi solo con telemetria valida e fresca.
+
+Attivare **Posiziona semafori**, poi trascinare un indicatore oppure selezionarlo e cliccare sul frame. Sono disponibili coordinate X/Y percentuali e frecce della tastiera sull’indicatore (Shift per spostamenti maggiori). Le posizioni sono salvate in localStorage per browser e origine, mantengono l’allineamento al ridimensionamento e si possono ripristinare. Non vengono inviate al controller o condivise tra browser. La sostituzione con frame camera dovrà mantenere immagine e overlay nello stesso contenitore, senza ritaglio del frame.

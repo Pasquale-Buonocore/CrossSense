@@ -9,7 +9,7 @@ $('phase-name').textContent=offline?(snapshot.source==='hardware'?'Hardware disc
 ['red','amber','green'].forEach(c=>$(c).className=!offline&&c===p.light?c:'');$('remaining').textContent=offline||stopped?'—':`${Math.max(0,duration-elapsed)} s`;$('progress').style.width=offline?'0%':`${100*(1-elapsed/duration)}%`;
 $('ped-signal').textContent=offline?'—':phase===2?'Verde':'Rosso';$('protection').textContent=offline?'—':phase===3?'Attiva':'Inattiva';$('occupied').textContent=offline?'Sconosciuto':phase===2||stopped?'Occupato':'Libero';$('occupancy-detail').textContent=offline?'Osservazioni non valide':stopped?'Pedone fermo · protezione mantenuta':phase===2?'Tracce demo in attraversamento':'Nessuna traccia sulle strisce';$('waiting').textContent=offline?'—':waiting;$('wait-detail').textContent=offline?'Conteggi non disponibili':`Sinistra ${waiting/2} · Destra ${waiting/2}`;
 $('count').textContent=completed??'—';$('avg').textContent=waitSamples.length?`${Math.round(waitSamples.reduce((a,b)=>a+b,0)/waitSamples.length)} s`:'—';$('ltr').textContent=left??'—';$('rtl').textContent=right??'—';['ltr','rtl'].forEach((id,i)=>$(id+'-bar').style.width=`${completed?100*(i?right:left)/completed:0}%`);
-let tracks='';if(!offline){const n=phase===2? (scenario==='busy'?6:2):stopped?1:waiting;for(let i=0;i<n;i++){const y=phase===2?95+(elapsed/duration)*205:stopped?190:i%2?345:50;const x=355+(i%3)*35;tracks+=`<rect x="${x-13}" y="${y-19}" width="26" height="38" rx="3" fill="#63d4b2" fill-opacity=".1" stroke="#63d4b2"/><circle cx="${x}" cy="${y-4}" r="6" fill="#9fe7ce"/><path d="M${x} ${y+2}v10" stroke="#9fe7ce" stroke-width="4"/><text x="${x-12}" y="${y-24}" fill="#9fe7ce" font-size="8" font-family="monospace">P${i+1}</text>`;}}$('tracks').innerHTML=tracks;const cx=phase===0?80+(elapsed/18)*650:phase===1?260:120;$('car').innerHTML=offline?'':`<rect x="${cx}" y="225" width="66" height="32" rx="8" fill="#91a5b5"/><rect x="${cx+15}" y="229" width="26" height="24" rx="4" fill="#344d60"/><rect x="${cx-5}" y="219" width="76" height="44" rx="5" fill="none" stroke="#81b4ee"/><text x="${cx}" y="213" fill="#81b4ee" font-size="8" font-family="monospace">V01 · STIMA N/D</text>`;
+trafficSignals.render(snapshot.outputs);
 document.querySelectorAll('[data-request]').forEach(b=>b.disabled=offline||paused);$('export').disabled=snapshot.source==='hardware';}
 function update(){render(provider.snapshot());}
 function setMode(value){
@@ -19,10 +19,10 @@ function setMode(value){
   $('mode-label').textContent=demo?'MODALITÀ DEMO':'MODALITÀ HARDWARE';
   $('notice-title').textContent=demo?'Simulazione locale':'Hardware non collegato';
   $('notice-detail').textContent=demo?'Camera e controller non collegati. Tutti i dati e le richieste sono simulati.':'API da configurare: telemetria e video non disponibili.';
-  $('vision-description').textContent=demo?'Schema animato · osservazioni simulate':'Schema di riferimento · nessun video collegato';
+  $('vision-description').textContent=demo?'Frame di esempio · uscite simulate':'Frame di esempio · uscite MCU non disponibili';
   $('vision-badge').textContent=demo?'● DEMO':'DISCONNESSO';
   $('controller-description').textContent=demo?'Macchina a stati · simulata':'Telemetria MCU · non disponibile';
-  $('scene-source').textContent=demo?'VISION SIMULATOR':'VIDEO NON DISPONIBILE';
+  $('scene-source').textContent='FRAME DI ESEMPIO · NON LIVE';
   $('device-detail').textContent=demo?'Ambiente di dimostrazione':'Connessione da configurare';
   $('events-description').textContent=demo?'Transizioni e risposte alle richieste demo':'Eventi di connessione hardware';
   $('scenario').disabled=!demo;$('scenario').value='normal';$('pause').disabled=!demo;$('pause').textContent='Ⅱ Pausa';

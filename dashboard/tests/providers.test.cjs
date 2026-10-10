@@ -12,3 +12,17 @@ demo.setScenario('stopped');for(let i=0;i<60;i++)demo.tick();assert.equal(demo.s
 const hardware=new HardwareProvider();assert.equal(hardware.snapshot().completed,null);assert.equal(hardware.request('pedestrian','r3').status,'rejected');for(let i=0;i<10;i++)hardware.tick();assert.equal(hardware.snapshot().seq,0);
 const fresh=new DemoProvider();assert.equal(fresh.snapshot().completed,0);
 console.log('Provider checks passed: deduplication, offline, clearance protection, hardware isolation.');
+const outputsDemo=new DemoProvider();
+assert.equal(outputsDemo.snapshot().outputs.vehicle,'green');
+assert.equal(outputsDemo.snapshot().outputs.pedestrian,'red');
+for(let i=0;i<18;i++)outputsDemo.tick();
+assert.equal(outputsDemo.snapshot().outputs.vehicle,'amber');
+for(let i=0;i<3;i++)outputsDemo.tick();
+assert.equal(outputsDemo.snapshot().outputs.vehicle,'red');
+assert.equal(outputsDemo.snapshot().outputs.pedestrian,'green');
+outputsDemo.setScenario('stopped');for(let i=0;i<20;i++)outputsDemo.tick();
+assert.equal(outputsDemo.snapshot().outputs.vehicle,'red');
+assert.equal(outputsDemo.snapshot().outputs.pedestrian,'red');
+outputsDemo.setScenario('offline');assert.equal(outputsDemo.snapshot().outputs,null);
+assert.equal(hardware.snapshot().outputs,null);
+console.log('Commanded outputs checked for all phases and missing telemetry.');

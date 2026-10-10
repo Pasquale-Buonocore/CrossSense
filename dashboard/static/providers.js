@@ -4,7 +4,7 @@ const phases = [{name:'Verde veicoli',sub:'Attraversamento pedonale in attesa',d
 class DemoProvider {
   constructor(emit = () => {}) { this.emit=emit; this.reset(); }
   reset() { this.state={phase:0,elapsed:0,seq:0,paused:false,scenario:'normal',left:0,right:0,completed:0,pending:[],waitSamples:[],extended:false}; }
-  snapshot() { return {...this.state, source:'demo', phases, waitSamples:[...this.state.waitSamples]}; }
+  snapshot() { return {...this.state, source:'demo', outputs:this.state.scenario==='offline'?null:{vehicle:phases[this.state.phase].light,pedestrian:this.state.phase===2?'green':'red'}, phases, waitSamples:[...this.state.waitSamples]}; }
   tick() {
     const s=this.state;
     if(s.paused||s.scenario==='offline') return this.snapshot();
@@ -44,7 +44,7 @@ class DemoProvider {
 }
 class HardwareProvider {
   // Deliberately disconnected until a transport and validated contract exist.
-  snapshot(){return {source:'hardware',phase:0,elapsed:0,seq:0,paused:false,scenario:'offline',left:null,right:null,completed:null,waitSamples:[],extended:false,phases};}
+  snapshot(){return {source:'hardware',outputs:null,phase:0,elapsed:0,seq:0,paused:false,scenario:'offline',left:null,right:null,completed:null,waitSamples:[],extended:false,phases};}
   tick(){return this.snapshot();}
   request(){return {status:'rejected',reason:'API hardware non configurata'};}
   dispose() {}
