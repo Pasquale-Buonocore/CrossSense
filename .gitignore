@@ -14,3 +14,10 @@ dist/
 *.pt
 *.onnx
 *.tflite
+*.pyc
+.DS_Store
+.local/
+data/*
+!data/README.md
+models/*
+!models/README.md

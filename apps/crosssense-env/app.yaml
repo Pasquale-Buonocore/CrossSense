@@ -1,0 +1,5 @@
+name: CrossSense Environment
+description: Prova RPC Linux-STM32 senza uscite GPIO
+icon: 🚦
+ports: []
+bricks: []

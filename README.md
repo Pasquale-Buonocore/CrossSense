@@ -55,6 +55,42 @@ Riferimenti: [manuale UNO Q](https://docs.arduino.cc/tutorials/uno-q/user-manual
 
 ## Stato e prossimi passi
 
-È disponibile la base Arduino App Lab con diagnostica Bridge, senza GPIO attivi. Camera, AI, tracking, conteggi, controllo semaforico e stime del rischio sono da implementare. Compilazione dello sketch e funzionamento su UNO Q restano da verificare sulla scheda.
+È disponibile la base Arduino App Lab con diagnostica Bridge, senza GPIO attivi. Acquisizione IMX219 su UNO Media Carrier e comunicazione Bridge sono state verificate sulla scheda tramite l’app separata `apps/crosssense-env`. La base App Lab nella radice resta uno scaffold distinto; AI, tracking, conteggi, controllo semaforico e stime del rischio sono da implementare.
 
 Per la demo partiremo da rilevamento → segnalazione → conteggio, poi aggiungeremo adattamento e allerte. Mostreremo un passaggio normale, un pedone fermo, direzioni opposte e un veicolo in avvicinamento, misurando latenza, falsi allarmi e continuità della protezione. Le prove si svolgeranno sul plastico e in ambiente controllato.
+
+## Ambiente verificato e strumenti del team
+
+
+```sh
+python3 -m venv .venv
+.venv/bin/python scripts/check_host.py
+python3 scripts/board.py shell 'hostname; free -h; v4l2-ctl --list-devices'
+```
+
+`scripts/board.py` trova ADB nel PATH o nell'installazione Arduino locale. Seleziona la scheda con `--serial` in presenza di più dispositivi. Non richiede password SSH.
+
+La prima app, `apps/crosssense-env`, verifica solo RPC Linux–MCU. Non pilota GPIO né implementa il controller semaforico. Per copiarla e avviarla sulla scheda:
+
+```sh
+python3 scripts/board.py push apps/crosssense-env /home/arduino/ArduinoApps/
+python3 scripts/board.py shell 'TMPDIR=/tmp arduino-app-cli app start /home/arduino/ArduinoApps/crosssense-env'
+python3 scripts/board.py shell 'arduino-app-cli app logs /home/arduino/ArduinoApps/crosssense-env --tail 20'
+```
+
+Avviare un'app con sketch carica nuovo firmware MCU. Arresto:
+
+```sh
+python3 scripts/board.py shell 'arduino-app-cli app stop /home/arduino/ArduinoApps/crosssense-env'
+```
+
+L'ambiente locale di base non richiede pacchetti esterni. Visione e dashboard saranno aggiunte dopo benchmark e scelta del runtime; l'SDK `arduino.app_utils` viene usato nel runtime App Lab sulla scheda, non nel venv del Mac.
+
+## Documenti
+
+- [Stato verificato dell'ambiente](docs/environment.md)
+- [Revisione tecnica](docs/technical-review.md)
+- [Divisione del lavoro e piano 30 ore](docs/team-plan.md)
+- [Contratto delle osservazioni, bozza](protocol/README.md)
+
+Cartelle riservate: `vision/` pipeline e calibrazione, `firmware/` controller MCU, `dashboard/` telemetria, `simulation/` replay e confronto.
