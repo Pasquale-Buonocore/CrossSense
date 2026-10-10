@@ -1,0 +1,7 @@
+# CPU wheels from the official PyTorch index; no CUDA packages on UNO Q.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0
+torchvision==0.23.0
+ultralytics==8.4.175
+lap==0.5.13
+ncnn==1.0.20260526

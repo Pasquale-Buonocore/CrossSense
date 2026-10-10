@@ -55,3 +55,34 @@ CAMSS ora attivo: `/dev/video0`–`/dev/video7`, `/dev/media0`; codec Venus spos
 Dopo autorizzazione esplicita dell’utente, applicato `scripts/configure-camera-access.sh`: regola permanente `/etc/udev/rules.d/99-crosssense-camera-dma.rules`, limitata a `/dev/dma_heap/system`, gruppo video e modalità 0660. Ricaricate le regole e verificata l’acquisizione di tre frame con utente arduino (uid 1000), senza sudo: 632×480 ABGR8888, 1.213.440 byte/frame. Non serve un ulteriore riavvio. Libcamera usa software ISP con configurazione `uncalibrated.yaml`; calibrazione colore ed esposizione da verificare. L’accesso camera da container App Lab va ancora verificato separatamente.
 
 Fonti di riferimento: [accesso Debian/ADB](https://docs.arduino.cc/tutorials/uno-q/debian-guide/), [formato Arduino App](https://github.com/arduino/arduino-app-cli/blob/main/docs/app-specification.md). I dati sopra provengono dai comandi eseguiti sulla scheda, non da specifiche nominali.
+
+## Deployment video YOLO — 10 ottobre 2026
+
+App attiva: `/home/arduino/ArduinoApps/crosssense-yolo-360`, dashboard su
+`http://192.168.23.19:8080`. Sorgenti aggiornati da Git con i cinque MP4 di
+`simulation/output` (2528×1696, 30 FPS). Tutti sono copiati nell'app e
+selezionabili dalla dashboard; l'ultima scelta persiste sulla scheda. Le
+zone di Gaetano restano configurabili e condivise.
+
+Frame elaborati 360×242, ingresso al modello 352×352: nessun lato supera
+360 pixel. YOLO26n della consegna è esportato in NCNN FP32, con ByteTrack e
+preview JPEG annotata con classe, ID e confidenza. Ultralytics 8.4.175,
+NCNN 1.0.20260526, PyTorch 2.8.0 CPU, torchvision 0.23.0 e lap 0.5.13 sono
+installati nel venv persistente dell'app. OpenCV headless 4.13.0 è fornito
+dall'immagine App Lab 0.12.0. Il modello è locale.
+
+Corretto il limite effettivo RouterBridge: la libreria 0.4.3 negoziava
+256 byte, insufficienti per Bridge v1. Il profilo usa la copia locale
+MPL-2.0, con buffer RPC 1024 e stack worker 4096 byte. Compilazione e flash
+STM32 riusciti: 113140 byte di programma, 47188 byte di globali. Ciclo
+logico attivo e telemetria reale sulla dashboard; nessun GPIO configurato.
+
+Verificati sulla UNO Q caricamento e cambio di tutti e cinque i video,
+nuove osservazioni fresche, limite dimensioni, risposta Bridge accettata
+e assenza di verdi conflittuali nei campioni. Inferenza nei campioni di
+avvio: 108–136 ms. Sono misure di quei campioni, non un benchmark completo
+dei cinque scenari. Ogni frame viene elaborato; il replay rallenta rispetto
+ai 30 FPS originali quando la catena non ne sostiene la frequenza.
+
+I server e i worker CrossSense sul Mac sono stati arrestati. Elaborazione,
+dashboard e scambio RT continuano sulla UNO Q anche senza browser.

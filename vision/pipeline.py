@@ -6,6 +6,7 @@ import secrets
 import threading
 import time
 from .zones import classify_position
+from .sources import VideoCatalog
 
 CLASSES = {0:('pedestrian','PEDONE'),1:('bicycle','BICICLETTA'),2:('vehicle','AUTO'),3:('vehicle','MOTO'),5:('vehicle','AUTOBUS'),7:('vehicle','CAMION')}
 
@@ -26,10 +27,14 @@ def observation(stream, sequence, captured_ms, detections, usable=True):
 
 
 class VisionService:
-    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=640, loop=False, clock=time.monotonic):
+    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=360, loop=False, clock=time.monotonic, frame_size=360, video_dir=None, selection_file=None):
         self.rt,self.zones,self.clock = rt,zones,clock
         self.video,self.model_path = Path(video) if video else None,Path(model) if model else None
+        self.catalog=VideoCatalog(video_dir,selection_file)
+        self.video=self.catalog.initial(self.video)
+        self.source_generation=0
         self.device,self.confidence,self.imgsz,self.loop = device,confidence,imgsz,loop
+        self.frame_size = frame_size
         self.lock,self.stop = threading.RLock(),threading.Event()
         self.stream,self.sequence = secrets.randbits(32),0
         self.status,self.error = 'idle',None
@@ -54,10 +59,21 @@ class VisionService:
             self.unavailable()
             return result
 
+    def select_video(self, data):
+        with self.lock:
+            self.video=self.catalog.select(data)
+            self.source_generation+=1
+            self.reset_stream()
+            self.unavailable()
+            self.frames.clear()
+            self.status,self.error='loading',None
+        if self.thread is None or not self.thread.is_alive(): self.start()
+        return self.snapshot()
+
     def snapshot(self):
         with self.lock:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
-            return {'available':self.video is not None,'status':self.status,'error':self.error,
+            return {**self.catalog.snapshot(self.video),'available':self.video is not None,'status':self.status,'error':self.error,
                     'source':self.video.name if self.video else None,'fresh':self.status == 'running' and age is not None and age < 750,
                     'age_ms':age,'frame':copy.deepcopy(self.current),'zones':self.zones.snapshot()}
 
@@ -67,7 +83,8 @@ class VisionService:
     def start(self):
         if self.video is None: return
         if not self.video.is_file(): raise ValueError(f'Video assente: {self.video}')
-        if self.model_path is None or not self.model_path.is_file(): raise ValueError(f'Modello locale assente: {self.model_path}')
+        if self.model_path is None or not (self.model_path.is_file() or (self.model_path.is_dir() and all((self.model_path/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))):
+            raise ValueError(f'Modello locale assente: {self.model_path}')
         self.status = 'loading'
         self.thread = threading.Thread(target=self.run,name='yolo-video',daemon=True)
         self.thread.start()
@@ -78,38 +95,57 @@ class VisionService:
             import cv2
             from ultralytics import YOLO
             model = YOLO(str(self.model_path))
-            cap = cv2.VideoCapture(str(self.video))
-            if not cap.isOpened(): raise ValueError('Impossibile aprire il video')
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if not 0 < fps <= 240: fps = 25
-            index,previous_ms = 0,-1
+            # Round down to the stride: neither inference side may exceed imgsz.
+            stride = max(int(v) for v in getattr(getattr(model,'model',None),'stride',[32]))
+            inference_size = max(stride,(self.imgsz//stride)*stride)
+            generation,previous_ms=-1,-1
             while not self.stop.is_set():
+                with self.lock: requested_generation,video=self.source_generation,self.video
+                if generation != requested_generation:
+                    if cap is not None: cap.release()
+                    cap=cv2.VideoCapture(str(video))
+                    if not cap.isOpened(): raise ValueError('Impossibile aprire il video')
+                    fps=cap.get(cv2.CAP_PROP_FPS)
+                    if not 0 < fps <= 240: fps=25
+                    for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
+                    generation,index=requested_generation,0
                 began = self.clock()
                 success,frame = cap.read()
                 if not success:
                     total = cap.get(cv2.CAP_PROP_FRAME_COUNT)
                     if index == 0 or (total > 0 and index < total): raise ValueError('Video vuoto o frame non decodificabile')
                     with self.lock:
+                        if generation != self.source_generation: continue
                         self.status = 'completed'
                         self.unavailable()
-                    if not self.loop: break
+                    if not self.loop:
+                        if self.catalog.directory is None: break
+                        while not self.stop.is_set() and generation == self.source_generation:
+                            self.stop.wait(.1)
+                        continue
                     cap.release()
-                    cap = cv2.VideoCapture(str(self.video))
+                    cap = cv2.VideoCapture(str(video))
                     if not cap.isOpened(): raise ValueError('Impossibile riaprire il video')
-                    with self.lock: self.reset_stream()
+                    with self.lock:
+                        if generation != self.source_generation: continue
+                        self.reset_stream()
                     for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
                     index = 0
                     continue
                 captured_ms = max(previous_ms+1,round(began*1000))
                 previous_ms = captured_ms
                 index += 1
+                height,width = frame.shape[:2]
+                if max(height,width) > self.frame_size:
+                    ratio = self.frame_size/max(height,width)
+                    frame = cv2.resize(frame,(max(1,round(width*ratio)),max(1,round(height*ratio))))
                 config = self.zones.snapshot()
                 if config['revision'] != self.applied_revision:
                     for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
                     self.applied_revision = config['revision']
                 start = self.clock()
                 result = model.track(frame,persist=True,tracker='bytetrack.yaml',classes=list(CLASSES),conf=self.confidence,
-                                     device=self.device,imgsz=self.imgsz,iou=.50,max_det=500,verbose=False)[0]
+                                     device=self.device,imgsz=inference_size,iou=.50,max_det=500,verbose=False)[0]
                 inference_ms = round((self.clock()-start)*1000,1)
                 height,width = frame.shape[:2]
                 detections = []
@@ -123,7 +159,7 @@ class VisionService:
                         detections.append({'id':track_id,'class':kind,'label':label,'confidence':round(confidence,4),
                                            'bbox':[round(v,1) for v in box],'zone':zone})
                         color = (80,220,120) if kind == 'pedestrian' else (255,180,70)
-                        scale = max(1,width/1280)
+                        scale = max(.55,width/1280)
                         thickness = max(2,round(2*scale))
                         text = f'{label} #{track_id or "?"} {confidence:.0%}'
                         (text_width,text_height),baseline = cv2.getTextSize(text,cv2.FONT_HERSHEY_SIMPLEX,.65*scale,thickness)
@@ -138,7 +174,7 @@ class VisionService:
                 if not ok: raise ValueError('Codifica preview non riuscita')
                 with self.lock:
                     # Drop a result that was inferred against polygons replaced mid-inference.
-                    if config['revision'] != self.zones.snapshot()['revision']: continue
+                    if config['revision'] != self.zones.snapshot()['revision'] or generation != self.source_generation: continue
                     self.sequence = (self.sequence+1)&0xffffffff
                     obs = observation(self.stream,self.sequence,captured_ms,detections)
                     obs['age_ms'] = max(0,round(self.clock()*1000)-captured_ms)
@@ -148,7 +184,7 @@ class VisionService:
                     while len(self.frames) > 4: self.frames.popitem(last=False)
                     self.current = {'serial':self.serial,'stream':self.stream,'sequence':self.sequence,'video_frame':index,
                                     'video_ms':round((index-1)*1000/fps),'width':width,'height':height,
-                                    'inference_ms':inference_ms,'observation':obs,'detections':detections,'zones_revision':config['revision']}
+                                    'inference_ms':inference_ms,'inference_size':inference_size,'observation':obs,'detections':detections,'zones_revision':config['revision']}
                     self.received,self.status,self.error = began,'running',None
                 self.stop.wait(max(0,1/fps-(self.clock()-began)))
         except Exception as exc:

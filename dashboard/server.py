@@ -77,6 +77,9 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path == '/api/vision/zones':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 self.reply(vision.configure(data))
+            elif self.path == '/api/vision/source':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                self.reply(vision.select_video(data))
             elif self.path == '/api/trial':
                 if vision and vision.video is not None: return self.reply({'error':'Il video YOLO è la sorgente attiva'},409)
                 trial = getattr(self.server,'trial',None)
@@ -108,21 +111,24 @@ def main(on_ready=None):
     parser.add_argument('--bridge',action='store_true',help='Usa arduino.app_utils sulla UNO Q')
     parser.add_argument('--layout-file',type=Path,default=Path(__file__).parent/'.local'/'signal-layout.json')
     parser.add_argument('--video',type=Path,help='MP4 da elaborare con YOLO26n')
+    parser.add_argument('--video-dir',type=Path,default=Path(__file__).resolve().parents[1]/'simulation'/'output',help='Catalogo MP4 selezionabile dalla dashboard')
+    parser.add_argument('--selection-file',type=Path,default=Path(__file__).parent/'.local'/'selected-video.json')
     parser.add_argument('--model',type=Path,default=Path(__file__).resolve().parents[1]/'models'/'yolo26n.pt')
     parser.add_argument('--zones-file',type=Path,default=Path(__file__).parent/'.local'/'vision-zones.json')
     parser.add_argument('--loop-video',action='store_true',help='Ripeti il video con un nuovo stream e tracker')
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--confidence',type=float,default=.30)
-    parser.add_argument('--imgsz',type=int,default=640)
+    parser.add_argument('--imgsz',type=int,default=360)
+    parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=360,help='Limite di entrambi i lati dei frame elaborati, rapporto conservato')
     args = parser.parse_args()
-    if not 0 < args.confidence <= 1 or not 32 <= args.imgsz <= 2048: parser.error('Confidenza o risoluzione non valida')
+    if not 0 < args.confidence <= 1 or not 32 <= args.imgsz <= 2048 or not 32 <= args.frame_size <= 2160: parser.error('Confidenza o risoluzione non valida')
     layout = LayoutStore(args.layout_file)
     call = None
     if args.bridge:
         from arduino.app_utils import Bridge
         call = Bridge.call
     rt = RTService(call)
-    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video)
+    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
     with ThreadingHTTPServer((args.host,args.port),handler) as server:
         server.rt = rt

@@ -18,11 +18,19 @@ ambiente che fornisce `arduino.app_utils`. Un solo `RTService` possiede Bridge;
 il worker YOLO pubblica l'ultimo frame senza attendere la RPC. Dashboard chiusa
 non interrompe elaborazione né scambi RT.
 
+Il selettore **Video simulazione** mostra gli MP4 di `simulation/output`
+(oppure della cartella indicata con `--video-dir`). Cambiare scelta avvia
+il video dall'inizio, azzera ByteTrack, cambia stream RT e scarta i risultati
+in elaborazione del video precedente. Le zone vengono mantenute; il selettore
+è disabilitato mentre le si modifica. La scelta è condivisa dai browser e
+persiste in `dashboard/.local/selected-video.json`. Solo file presenti nel
+catalogo sono selezionabili: non si accettano URL o percorsi esterni.
+
 Ogni frame decodificato viene elaborato con `model.track(..., persist=True,
 tracker='bytetrack.yaml')`; se l'inferenza è più lenta del video, il replay
 rallenta senza saltare frame. Il timestamp RT è monotono al momento della
 lettura, mentre `video_ms` indica separatamente la posizione nel file.
-`--device cpu`, `--confidence 0.30` e `--imgsz 640` sono i valori iniziali.
+`--device cpu`, `--confidence 0.30`, `--frame-size 360` e `--imgsz 360` sono i valori iniziali. Entrambi i lati dei frame restano entro 360 pixel, mantenendo il rapporto; le ROI normalizzate non cambiano. Per la sorgente di prova 1264×848 il frame è 360×242. Il lato di inferenza viene arrotondato **per difetto** allo stride: 352 per YOLO26n, così anche l'ingresso al modello resta entro 360×360. `--frame-height` è un alias compatibile di `--frame-size` e limita entrambi i lati.
 Senza `--loop-video`, EOF pubblica indisponibilità; con loop riapre il file,
 resetta ByteTrack e genera un nuovo stream. Errori di lettura/inferenza e stop
 pubblicano un frame invalido. Un video lungo non viene accumulato in memoria.
@@ -54,7 +62,9 @@ in elaborazione sulla revisione vecchia vengono scartati.
 
 `GET /api/vision`: stato, freschezza, errore, configurazione e ultimo frame,
 con detection `{id, class, label, confidence, bbox, zone}`, tempo di inferenza,
-indice nel video e osservazione [Bridge v1](../protocol/bridge-v1.md).
+indice nel video e osservazione [Bridge v1](../protocol/bridge-v1.md), oltre
+a `videos` e `selected_video`. `POST /api/vision/source`: `{video: id}`
+seleziona un ID del catalogo e invalida subito le osservazioni precedenti.
 `GET /api/vision/frame.jpg?serial=N`: JPEG annotato di quel preciso snapshot;
 cache limitata agli ultimi quattro JPEG. `GET /api/vision/reference.jpg`:
 immagine per configurare le ROI senza video. `GET /api/vision/zones` e
@@ -84,11 +94,27 @@ python3 scripts/package_rt.py .local/crosssense-video --video /percorso/video.mp
 
 Includere eventualmente `--zones-file dashboard/.local/vision-zones.json` per
 trasferire le ROI modificate. Il pacchetto comprende sorgenti, video, modello
-e `python/requirements.txt`. `--controller-cycle` abilita il ciclo logico STM32
+e `python/requirements.txt` con le versioni CPU per ARM di `vision/requirements-unoq.txt`. `--controller-cycle` abilita il ciclo logico STM32
 esistente senza avviare il generatore sintetico; nessun GPIO configurato.
 Il firmware protetto rimane il default senza questa opzione. `--standard-cycle`
 con video viene rifiutato. Dipendenze/modello devono essere preparati sulla
-scheda prima dell'uso offline; le prestazioni su UNO Q richiedono una prova.
+scheda prima dell'uso offline.
+
+Sulla UNO Q il modello consegnato viene esportato in NCNN FP32 per ridurre
+il tempo di inferenza. La conversione mantiene i pesi e avviene prima del
+deployment, senza download di modelli durante l'esecuzione:
+
+```sh
+.venv/bin/python -c 'from ultralytics import YOLO; YOLO("models/yolo26n.pt").export(format="ncnn", imgsz=352, device="cpu")'
+python3 scripts/package_rt.py .local/crosssense-video-ncnn --video-dir simulation/output --model models/yolo26n_ncnn_model --controller-cycle --loop-video --zip
+```
+
+La dimensione di export deve corrispondere a quella di inferenza; riesportare
+se si cambia `--imgsz`. L'entry point UNO Q usa OpenCV headless già presente
+nell'immagine App Lab, evitando il requisito libGL del wheel GUI installato
+come dipendenza transitiva di Ultralytics. NCNN è incluso nei requirements
+ARM. La libreria RouterBridge locale dichiarata dal profilo dello sketch usa
+buffer RPC da 1024 byte e stack worker da 4096 byte per i payload Bridge v1.
 
 ## Verifica
 
@@ -107,6 +133,6 @@ editor web e cambio revisione. `scripts/check_video.py` compila lo sketch reale
 sul Mac, sostituendo il trasporto Bridge: verifica accettazione delle
 osservazioni, cambio stream delle ROI, indisponibilità a EOF e assenza di verdi
 conflittuali. Il test è passato sia con frame validi sia con overflow di tracce. I vincoli NumPy/OpenCV per Intel macOS evitano
-l'incompatibilità di PyTorch 2.2 con NumPy 2. Il video sintetico definitivo e
-lo scambio fisico Bridge sulla UNO Q vanno verificati quando disponibili.
+l'incompatibilità di PyTorch 2.2 con NumPy 2. Il catalogo di replay contiene
+i cinque MP4 aggiunti in `simulation/output`.
 Documentazione dell'API tracking: [Ultralytics](https://docs.ultralytics.com/modes/track/).

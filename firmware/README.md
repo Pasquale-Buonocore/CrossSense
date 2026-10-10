@@ -91,7 +91,10 @@ python3 scripts/board.py shell 'TMPDIR=/tmp arduino-app-cli app start /home/ardu
 
 L'avvio compila e carica lo sketch STM32; cambia il firmware attivo sulla
 scheda. Le altre app sono conservate. Dipendenze del profilo: ArduinoJson
-7.4.3 e RouterBridge 0.4.3 con dipendenze transitive esplicite. Il primo
+7.4.3 e RouterBridge 0.4.3 con dipendenze transitive esplicite. Il profilo usa
+la copia locale in `sketch/libraries/Arduino_RouterBridge`: buffer RPC da
+1024 byte e stack worker da 4096 byte, per i payload JSON Bridge v1 da 900
+byte. Richiede Arduino CLI >=1.3 per la voce `dir` del profilo. Il primo
 avvio può richiedere download. Lo sketch usa `provide_safe` per mantenere
 il buffer e il loop sullo stesso thread.
 

@@ -7,6 +7,8 @@ class VisionView {
     this.image=document.getElementById('preview-frame');this.layer=document.getElementById('vision-zones');
     this.controls=document.getElementById('zone-controls');this.note=document.getElementById('zone-note');
     this.select=document.getElementById('zone-select');this.draft=null;
+    this.videoSelect=document.getElementById('video-select');this.changingVideo=false;this.sourceToken=0;
+    this.videoSelect.addEventListener('change',()=>this.changeVideo());
     document.getElementById('zone-edit').addEventListener('click',()=>this.toggleEditor());
     document.getElementById('zone-cancel').addEventListener('click',()=>this.closeEditor());
     document.getElementById('zone-clear').addEventListener('click',()=>{this.draft.config.zones[this.select.value]=[];this.draw();});
@@ -23,22 +25,31 @@ class VisionView {
   }
   async refresh(){
     if(this.polling)return;this.polling=true;
+    const sourceToken=this.sourceToken;
     try{
       const response=await fetch('/api/vision',{cache:'no-store'});if(!response.ok)throw Error('Visione non disponibile');
-      const data=await response.json();this.data=data;this.receivedAt=Date.now();
+      const data=await response.json();if(sourceToken!==this.sourceToken)return;this.data=data;this.receivedAt=Date.now();
       if(!this.editing&&this.mode==='hardware'&&data.frame&&data.frame.serial!==this.serial){
         const serial=data.frame.serial,url=`/api/vision/frame.jpg?serial=${serial}`,image=new Image();
         await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(Error('Frame scaduto'));image.src=url;});
-        if(!this.editing&&this.mode==='hardware'){this.image.src=url;this.serial=serial;}
+        if(sourceToken===this.sourceToken&&!this.editing&&this.mode==='hardware'){this.image.src=url;this.serial=serial;}
       }
       this.render(this.mode);
-    }catch{this.data=null;this.render(this.mode);}
+    }catch{if(sourceToken===this.sourceToken){this.data=null;this.render(this.mode);}}
     finally{this.polling=false;}
   }
   render(mode){
     const changed=this.mode!==mode;this.mode=mode;
     if(changed&&!this.editing){this.serial=null;this.image.src=mode==='demo'?'example-frame.jpg':'/api/vision/reference.jpg';}
     const data=this.data;
+    const videos=data?.videos||[],catalogKey=JSON.stringify(videos);
+    if(catalogKey!==this.catalogKey){
+      this.catalogKey=catalogKey;this.videoSelect.replaceChildren();
+      if(!videos.length){const option=document.createElement('option');option.value='';option.textContent='Nessun video disponibile';this.videoSelect.append(option);}
+      for(const video of videos){const option=document.createElement('option');option.value=video.id;option.textContent=video.label;this.videoSelect.append(option);}
+    }
+    if(!this.changingVideo)this.videoSelect.value=data?.selected_video||'';
+    this.videoSelect.disabled=mode!=='hardware'||!videos.length||this.editing||this.changingVideo;
     this.image.alt=mode==='hardware'?'Video elaborato con bounding box, classi e confidenze YOLO':'Frame della simulazione locale';
     document.getElementById('zone-edit').disabled=!data?.zones||this.editing;
     if(!this.editing)this.note.textContent=data?.zones?'Zone condivise · modifica i poligoni direttamente sul frame.':'Caricamento delle zone…';
@@ -49,7 +60,7 @@ class VisionView {
       document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza`:'Video MP4 · configurare la sorgente sul server';
       document.getElementById('scene-source').textContent=this.editing?'MODIFICA ZONE · FRAME FERMO':fresh?'VIDEO MP4 · YOLO26 + BYTETRACK':status.toUpperCase();
       document.getElementById('notice-detail').textContent=data?.available?'Video YOLO · lo stato del controller è mostrato separatamente.':'Stato RT dal servizio · video MP4 non configurato.';
-      document.getElementById('vision-detail').textContent=data?.error||(frame?`${frame.detections.length} oggetti · frame video ${frame.video_frame} · ${Math.round(frame.video_ms/1000)} s · ROI revisione ${frame.zones_revision}`:status);
+      document.getElementById('vision-detail').textContent=data?.error||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · frame video ${frame.video_frame} · ${Math.round(frame.video_ms/1000)} s · ROI revisione ${frame.zones_revision}`:status);
       const obs=fresh?frame.observation:null;
       document.getElementById('occupied').textContent=obs?.crossing==='occupied'?'Occupato':obs?.valid&&obs.crossing==='clear'?'Libero':'Sconosciuto';
       document.getElementById('occupancy-detail').textContent=obs?.valid?'Osservazione YOLO corrente':obs?(frame.detections.length>8?'Più di 8 oggetti · osservazione RT invalida':'Tracking non disponibile'):'Nessuna osservazione YOLO fresca';
@@ -62,6 +73,18 @@ class VisionView {
       if(this.editing)document.getElementById('scene-source').textContent='MODIFICA ZONE · FRAME DI RIFERIMENTO';
     }
     this.draw();
+  }
+  async changeVideo(){
+    if(this.changingVideo||this.editing)return;
+    this.changingVideo=true;this.sourceToken++;this.videoSelect.disabled=true;
+    const note=document.getElementById('video-note');note.textContent='Cambio video…';
+    try{
+      const response=await fetch('/api/vision/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video:this.videoSelect.value})});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'Cambio video non riuscito');
+      this.data=data;this.serial=null;this.image.src='/api/vision/reference.jpg';
+      note.textContent='Video selezionato · tracking riavviato.';
+    }catch(e){note.textContent=e.message;}
+    finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
   }
   toggleEditor(){
     if(!this.data?.zones)return;
