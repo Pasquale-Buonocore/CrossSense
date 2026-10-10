@@ -1,5 +1,6 @@
 // Arduino UNO Q: Linux chooses the LED; the MCU only applies commands.
 // Built-in RGB LEDs are active LOW. No external wiring is required.
+#include "crosssense_types.h"  // Step 1: compile the controller data model.
 #include <Arduino_RouterBridge.h>
 
 const int LED_PINS[] = {
