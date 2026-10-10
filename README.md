@@ -56,9 +56,17 @@ Dettagli in [architettura](docs/architecture.md), [contratto delle osservazioni]
 
 ## Strategia semaforica e base del firmware STM32
 
+È disponibile una [prova del ciclo standard sui semafori della dashboard](firmware/docs/standard-cycle.md):
+`scripts/try_standard_cycle.py` invia osservazioni sintetiche all'API dashboard;
+lo sketch STM32 decide le fasi e restituisce la telemetria. Il pacchetto si
+genera con `python scripts/package_rt.py dist/crosssense-dashboard-cycle-v3 --standard-cycle --zip`.
+L'app avvia automaticamente due cicli sulla parte Linux; lo sketch non usa GPIO.
+Il ciclo è verificato sul PC con Bridge simulato; la verifica sulla UNO Q resta da eseguire.
+
 Il PDF descrive il ciclo `Verde veicoli -> Giallo veicoli -> Tutto rosso -> Verde pedoni -> Giallo pedoni -> Tutto rosso -> Verde veicoli`. Per il firmware, la [revisione tecnica](docs/technical-review.md) precisa la fase finale pedonale come **sgombero con rosso pedoni**: chiude i nuovi ingressi e protegge chi è già sulle strisce. Un eventuale giallo pedonale del plastico richiede un significato esplicito prima del cablaggio.
 
-Gli identificatori seguenti sono una proposta di specifica, non un'API già implementata.
+Gli identificatori seguenti descrivono il controller completo previsto; il ciclo
+dashboard implementa il sottoinsieme di base descritto nella guida della prova.
 
 | Stato | Uscite semaforiche previste | Condizione principale di uscita |
 | --- | --- | --- |
@@ -209,7 +217,7 @@ Riferimenti: [manuale UNO Q](https://docs.arduino.cc/tutorials/uno-q/user-manual
 
 ## Stato attuale e prossimi passi
 
-Sono disponibili la dashboard Demo/Hardware e l’app RT Bridge in `firmware/`: ricevitore STM32 `crosssense_update`, validazione, buffer atomico e watchdog. L’app RT mantiene LED3/LED4 rossi in modalità protetta; macchina semaforica, AI/tracking, conteggi e stime del rischio restano da implementare. La prova LED precedente è conservata in `apps/crosssense-led-counter/`, la diagnostica senza GPIO in `apps/crosssense-env/`. Vedi [avvio dell’app RT](firmware/README.md). I documenti di ambiente registrano acquisizione IMX219 e comunicazione Bridge verificate sulla scheda.
+Sono disponibili la dashboard Demo/Hardware e l’app RT Bridge in `firmware/`: ricevitore STM32 `crosssense_update`, validazione, buffer atomico e watchdog. L'app RT mantiene i campi semaforici rossi in modalità protetta; il ciclo standard dashboard si abilita nel pacchetto e non pilota GPIO. AI/tracking, conteggi e stime del rischio restano da implementare. La prova LED precedente è conservata in `apps/crosssense-led-counter/`, la diagnostica senza GPIO in `apps/crosssense-env/`. Vedi [avvio dell’app RT](firmware/README.md). I documenti di ambiente registrano acquisizione IMX219 e comunicazione Bridge verificate sulla scheda.
 
 Per la demo partiremo da rilevamento → segnalazione → conteggio, poi aggiungeremo adattamento e allerte. Mostreremo un passaggio normale, un pedone fermo, direzioni opposte e un veicolo in avvicinamento, misurando latenza, falsi allarmi e continuità della protezione. Le prove si svolgeranno sul plastico e in ambiente controllato.
 

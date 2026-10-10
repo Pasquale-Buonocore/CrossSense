@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <stdint.h>
 #include <string.h>
+#include "standard_cycle.h"
 
 namespace CrossSense {
 constexpr uint32_t Deadline = 1000, TransportBudget = 250;
@@ -77,6 +78,8 @@ inline bool same(const Frame& a,const Frame& b) {
 
 class RTCore {
  public:
+  explicit RTCore(bool standardCycle = false) : cycleEnabled(standardCycle) {}
+  StandardCycle cycle;
   Frame accepted, applied;
   bool hasAccepted=false, hasApplied=false, pending=false, observationValid=false;
   bool requestLevels[3]={}, pendingRequests[3]={};
@@ -88,6 +91,7 @@ class RTCore {
       const bool reset=!hasApplied || applied.stream!=accepted.stream;
       if (reset) {
         for (uint8_t i=0;i<3;++i) {requestLevels[i]=false;pendingRequests[i]=false;}
+        cycle.reset(now);
       }
       applied=accepted;hasApplied=true;pending=false;appliedAt=acceptedAt;
       for (uint8_t i=0;i<3;++i) {
@@ -96,12 +100,15 @@ class RTCore {
       }
       if (pendingRequests[1]) pendingRequests[0]=true;
     }
-    if (!hasApplied) {observationValid=false;fault="NO_DATA";return;}
-    if (!applied.valid) {observationValid=false;fault="INVALID_DATA";return;}
-    const uint64_t age=uint64_t(applied.age)+TransportBudget+uint32_t(now-appliedAt);
-    observationValid=age<Deadline;
-    fault=observationValid?nullptr:"TIMEOUT";
+    tickWatchdog(now);
+    if (cycleEnabled) {
+      cycle.tick(now,observationValid,applied.crossing==2,pendingRequests[0]);
+      if (cycle.consumePedestrian) {pendingRequests[0]=false;pendingRequests[1]=false;}
+    }
   }
+
+  const char* vehicleLight() const {return cycleEnabled?cycle.vehicleLight():"RED";}
+  const char* pedestrianLight() const {return cycleEnabled?cycle.pedestrianLight():"RED";}
 
   void update(const char* raw,size_t length,uint32_t now,JsonDocument& response) {
     JsonDocument input;
@@ -133,20 +140,29 @@ class RTCore {
     }
     // State describes the frame already consumed by loop(), never the pending frame.
     tickWatchdog(now);
+    // A callback can detect a timeout before the next loop tick. Close greens;
+    // only loop() may consume data, serve requests or advance normal phases.
+    if (cycleEnabled && !observationValid) cycle.tick(now,false,false,false);
     response.clear();
     if (readable) response["frame"]=receivedFrame;else response["frame"]=nullptr;
     response["ok"]=ok;response["error"]=error;
     if (hasApplied) {response["applied_stream"]=applied.stream;response["applied_frame"]=applied.frame;}
     else {response["applied_stream"]=nullptr;response["applied_frame"]=nullptr;}
     response["uptime_ms"]=now;
-    response["phase"]=observationValid?"PROTECTED_STOP":"FAULT";
-    response["remaining_ms"]=nullptr;
-    response["vehicle_light"]="RED";response["pedestrian_light"]="RED";
+    response["phase"]=cycleEnabled?cycle.phaseName():(observationValid?"PROTECTED_STOP":"FAULT");
+    uint32_t remaining=0;
+    if (cycleEnabled && cycle.remaining(now,pendingRequests[0],remaining)) response["remaining_ms"]=remaining;
+    else response["remaining_ms"]=nullptr;
+    response["vehicle_light"]=vehicleLight();response["pedestrian_light"]=pedestrianLight();
     response["buzzer"]=false;response["beacon"]=false;
     response["observation_valid"]=observationValid;response["fault"]=fault;
-    response["alarms"].to<JsonArray>();response["estimates"].to<JsonArray>();
+    auto alarms=response["alarms"].to<JsonArray>();
+    if (cycleEnabled && cycle.crossingConflict) alarms.add("CROSSING_CONFLICT");
+    if (cycleEnabled && cycle.clearanceTimeout) alarms.add("CLEARANCE_TIMEOUT");
+    response["estimates"].to<JsonArray>();
   }
  private:
+  bool cycleEnabled;
   uint32_t acceptedAt=0,appliedAt=0;
   uint64_t captureTime=0;
   bool hasCapture=false;

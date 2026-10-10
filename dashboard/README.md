@@ -27,6 +27,13 @@ l'hardware; in Hardware le metriche Linux non ancora disponibili restano vuote.
 
 ## Verifica
 
+La pagina legge `GET /api/config`: con Bridge configurato parte automaticamente
+in Hardware, altrimenti in Demo. Nell'app di prova STM32 compare **Ripeti prova
+STM32** dopo i due cicli automatici. Dashboard, API e servizio Bridge usano
+un unico server sulla porta 8080. Fermare il precedente processo dashboard e
+la vecchia app di prova prima di avviare il pacchetto aggiornato: non deve
+rimanere un secondo server sulla 8081.
+
 ```sh
 node dashboard/tests/providers.test.cjs
 ```
@@ -85,7 +92,13 @@ Senza nuova immagine il servizio invia un nuovo frame invalido, senza
 riutilizzare l'immagine come osservazione fresca. Non deduce occupazione,
 conteggi o tempi d'attesa dalle fasi: questi dati restano indisponibili in
 Hardware. Mostra fase, uscite comandate e residuo reale (anche null).
-Video live, statistiche Linux e controller MCU non sono implementati qui.
+Video live e statistiche Linux non sono implementati qui. Il firmware offre
+anche un [ciclo standard di prova](../firmware/docs/standard-cycle.md), abilitato
+nel pacchetto con `--standard-cycle`: l'app avvia due cicli sintetici usando
+questa API. Lo sketch restituisce la telemetria Bridge v1 senza configurare GPIO.
+In modalità Hardware, `HardwareProvider` legge `GET /api/rt` e traduce
+`vehicle_light`/`pedestrian_light` nei colori dei tre indicatori; pedoni SX/DX
+condividono lo stesso stato. Non serve un POST aggiuntivo per cambiare le luci.
 
 Verifica adapter:
 

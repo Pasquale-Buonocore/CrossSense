@@ -1,6 +1,27 @@
 # CrossSense RT Bridge
 
-Il [piano degli step e punto di ripresa](docs/README.md) e lo [storico delle decisioni e verifiche](docs/history.md) sono conservati in `firmware/docs`. Step 1 completato con verifiche native; step 2 in discussione prima dell'implementazione.
+Il [piano degli step e punto di ripresa](docs/README.md) e lo [storico delle decisioni e verifiche](docs/history.md) sono conservati in `firmware/docs`. Il ricevitore Bridge v1 è implementato; il [ciclo standard di prova](docs/standard-cycle.md) aggiorna i tre semafori della dashboard tramite la telemetria STM32, senza configurare GPIO o LED fisici.
+
+## Prova rapida del ciclo standard
+
+Dalla radice del repository:
+
+```sh
+python scripts/package_rt.py dist/crosssense-dashboard-cycle-v3 --standard-cycle --zip
+```
+
+Importare lo ZIP in Arduino App Lab e avviare **CrossSense Dashboard Cycle**.
+Due cicli partono automaticamente sulla parte Linux usando HTTP locale;
+aprire la dashboard sulla porta 8080; **Hardware** viene selezionato automaticamente.
+Prima dell'avvio fermare la vecchia app di prova e il precedente processo
+dashboard: il pacchetto aggiornato serve pagina, API e Bridge sulla sola 8080.
+
+Lo script invia osservazioni sintetiche all'API dashboard e verifica la sequenza
+effettiva MCU e l'arresto finale. I colori sono nei campi Bridge v1
+`vehicle_light` e `pedestrian_light`; la dashboard li mostra sui tre indicatori.
+Il firmware mantiene il rosso logico durante occupazione/guasto.
+Tempi, guardie, limiti e verifiche sono nella [guida della prova](docs/standard-cycle.md).
+Il pacchetto senza `--standard-cycle` conserva entrambi i rossi logici e non avvia dati sintetici.
 
 ## Controller STM32: step 1
 
@@ -12,7 +33,7 @@ Sono disponibili le strutture C++11 del [protocollo Bridge v1](../protocol/bridg
 
 `Nullable<T>` usa `has_value` per distinguere JSON null da uno zero valido. La posizione ha una sola validità per x/y; le stime hanno validità individuale. Gli array hanno capacità 8 per tracce/stime e 4 per allarmi; solo gli elementi prima del rispettivo contatore sono attivi. Il parser dello step 2 dovrà controllare i contatori, i range e la coerenza prima di depositare il frame. `ControllerState.applied` identifica il frame applicato, mentre `UpdateResponse.frame` identifica quello ricevuto.
 
-Lo stato logico iniziale è `FAULT`/`NO_DATA`, con entrambi i semafori rossi, nessun countdown e nessuna osservazione valida. Questo non configura GPIO: lo sketch include gli header per verificarne la compilazione anche in App Lab, mentre il comportamento resta quello della prova LED sotto.
+Lo stato logico iniziale è `FAULT`/`NO_DATA`, con entrambi i campi semaforici rossi, nessun countdown e nessuna osservazione valida. Lo sketch non configura GPIO; la vecchia prova dei singoli LED è conservata in `apps/crosssense-led-counter/`.
 
 Limiti definiti: 8 tracce, 900 byte JSON, 5 Hz; tick proposto 10 ms, timeout osservazioni 1000 ms, budget di trasporto 250 ms. Le durate semaforiche e le finestre di conferma restano a **0 = da configurare**. `isConfigurationComplete` rifiuta parametri mancanti, durate incompatibili con i confronti temporali al wrap e intervalli incoerenti; verifica solo la coerenza numerica, non hardware o garanzie del trasporto. Le soglie del rischio saranno definite nello step 5.
 
@@ -26,9 +47,9 @@ g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/step1_test.cpp -o build/ste
 
 In PowerShell: `New-Item -ItemType Directory -Force build`, compilare con `-o build/step1_test.exe` ed eseguire `./build/step1_test.exe`. La cartella `build/` è ignorata da Git. I tempi nel test sono fixture, non parametri scelti per la demo. Le dimensioni stampate sono del compilatore locale e vanno misurate anche con il toolchain MCU.
 
-Completato questo step, il prossimo è il parser/serializer e la RPC `crosssense_update`; la macchina a stati, il watchdog operativo e le stime non sono ancora implementati.
+Il parser/serializer e la RPC `crosssense_update` sono in `rt_protocol.h`; il watchdog operativo e il ciclo di prova sono implementati. Le stime cinematiche restano da implementare.
 
-### Avvio in Arduino App Lab
+### Pacchetto storico step 1
 
 Il pacchetto preparato in `../dist/crosssense-step1.zip` contiene il manifest, Python, sketch, nuovi header e test sorgenti; esclude gli eseguibili locali. Collegare la UNO Q, selezionarla in App Lab, importare lo ZIP da **My Apps -> Import**, aprire **CrossSense Linux LED Counter** e premere **Run**. App Lab compila/carica lo sketch e avvia Python sulla scheda.
 
@@ -49,12 +70,13 @@ pedestrian. Il watchdog usa età immagine + 250 ms di budget + tempo MCU,
 con deadline 1000 ms. La sola durata RPC misurata da Linux non garantisce
 il limite di consegna sulla MCU.
 
-**Modalità di integrazione protetta:** LED3 (veicoli) e LED4 (pedoni) sono
-entrambi rossi. Con dati validi la fase è `PROTECTED_STOP`, altrimenti `FAULT`
+**Modalità di integrazione protetta:** `vehicle_light` e `pedestrian_light` sono
+entrambi `RED`. Con dati validi la fase è `PROTECTED_STOP`, altrimenti `FAULT`
 con `NO_DATA`, `INVALID_DATA` o `TIMEOUT`. Residuo null, buzzer/beacon false,
 stime/allarmi vuoti. Le richieste restano pendenti e non aprono il verde.
-Non sono ancora implementati macchina semaforica, stime cinematiche,
-attuatori esterni o camera/inferenza. Nessun altro RPC può forzare i GPIO.
+In questa modalità la macchina semaforica di prova rimane disabilitata.
+Stime cinematiche, attuatori esterni e camera/inferenza restano da implementare.
+Nessun altro RPC può forzare i GPIO.
 
 ## Preparazione e caricamento
 
@@ -73,14 +95,26 @@ scheda. Le altre app sono conservate. Dipendenze del profilo: ArduinoJson
 avvio può richiedere download. Lo sketch usa `provide_safe` per mantenere
 il buffer e il loop sullo stesso thread.
 
-Aprire `http://IP-DELLA-SCHEDA:8081` e scegliere **Hardware**. Il servizio
+Aprire `http://IP-DELLA-SCHEDA:8080` e scegliere **Hardware**. Il servizio
 scambia dati anche senza browser: in assenza di visione invia osservazioni
 invalide e riceve la telemetria reale del controller protetto. L'API non
 ha autenticazione; la porta è esposta sulla rete locale per la demo.
 
 ## Verifica locale
 
-Con ArduinoJson disposnibile:
+Con ArduinoJson 7.4.3 disponibile, dalla radice del repository:
+
+```sh
+g++ -std=c++11 -Wall -Wextra -Werror -pedantic -I DIRECTORY-ARDUINOJSON firmware/tests/rt_protocol_test.cpp -o firmware/build/rt_protocol_test
+g++ -std=c++11 -Wall -Wextra -Werror -pedantic -I DIRECTORY-ARDUINOJSON firmware/tests/standard_cycle_test.cpp -o firmware/build/standard_cycle_test
+python -m unittest discover -s scripts/tests -p 'test_*.py'
+python scripts/check_standard_cycle.py --arduino-json DIRECTORY-ARDUINOJSON
+```
+
+Eseguire gli eseguibili compilati; in Windows usare il suffisso `.exe`.
+La [guida](docs/standard-cycle.md) descrive anche i test dello sketch e del renderer dei tre semafori.
+
+### Prova LED precedente
 
 La sequenza predefinita alterna LED3 rosso, LED4 rosso, LED3 verde,
 LED4 verde, LED3 blu, LED4 blu. Linux attende 0,5 secondi dopo ogni conferma.

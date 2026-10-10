@@ -9,17 +9,32 @@ from layout import LayoutStore
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def log_request(self, code='-', size='-'):
+        # Keep MCU phase/trial messages visible instead of logging each 5/10 Hz poll.
+        if code == 200 and self.path in ('/api/rt','/api/observations','/api/trial'):
+            return
+        super().log_request(code,size)
+
+    def end_headers(self):
+        # App updates must not reuse an old dashboard/provider from the browser cache.
+        self.send_header('Cache-Control','no-store')
+        super().end_headers()
+
     def reply(self, value, status=200):
         raw = json.dumps(value,allow_nan=False).encode()
         self.send_response(status)
         self.send_header('Content-Type','application/json')
-        self.send_header('Cache-Control','no-store')
         self.send_header('Content-Length',str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path == '/api/signal-layout': self.reply(self.server.layout.snapshot())
+        if self.path == '/api/config':
+            self.reply({'default_mode':'hardware' if self.server.rt.call is not None else 'demo'})
+        elif self.path == '/api/trial':
+            trial = getattr(self.server,'trial',None)
+            self.reply(trial.snapshot() if trial is not None else {'available':False,'status':'unavailable'})
+        elif self.path == '/api/signal-layout': self.reply(self.server.layout.snapshot())
         elif self.path == '/api/rt': self.reply(self.server.rt.snapshot())
         else: super().do_GET()
 
@@ -34,7 +49,13 @@ class Handler(SimpleHTTPRequestHandler):
             size = int(self.headers.get('Content-Length','0'))
             if not 0 < size <= 4096: raise ValueError('Dimensione richiesta non valida')
             data = json.loads(self.rfile.read(size))
-            if self.path == '/api/signal-layout':
+            if self.path == '/api/trial':
+                trial = getattr(self.server,'trial',None)
+                if trial is None: return self.reply({'error':'Prova sintetica non disponibile'},409)
+                if data != {}: raise ValueError('La prova richiede un oggetto JSON vuoto')
+                result = trial.start()
+                self.reply(result,409 if result['status']=='rejected' else 200)
+            elif self.path == '/api/signal-layout':
                 self.reply(self.server.layout.update(data))
             elif self.path == '/api/observations':
                 self.server.rt.publish(data)
@@ -48,7 +69,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply({'error':str(exc)},400)
 
 
-def main():
+def main(on_ready=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--port',type=int,default=8080)
     parser.add_argument('--host',default='127.0.0.1')
@@ -67,7 +88,9 @@ def main():
         server.layout = layout
         rt.start()
         print(f'CrossSense: http://{args.host}:{args.port}',flush=True)
-        try: server.serve_forever()
+        try:
+            if on_ready is not None: on_ready(server)
+            server.serve_forever()
         finally: rt.stop.set()
 
 

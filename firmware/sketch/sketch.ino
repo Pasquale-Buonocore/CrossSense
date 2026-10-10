@@ -1,9 +1,11 @@
-// Bridge v1 receiver. Controller commissioning mode: both built-in RGB LEDs red.
+// Bridge v1 receiver. Signal outputs are telemetry for the Linux dashboard.
 #include <Arduino_RouterBridge.h>
 #include "rt_protocol.h"
 
-CrossSense::RTCore rt;
-const int LED_PINS[] = {LED3_R,LED3_G,LED3_B,LED4_R,LED4_G,LED4_B};
+#ifndef CROSSSENSE_STANDARD_CYCLE
+#define CROSSSENSE_STANDARD_CYCLE 0
+#endif
+CrossSense::RTCore rt(CROSSSENSE_STANDARD_CYCLE != 0);
 
 String crosssense_update(String frameJson) {
   JsonDocument response;
@@ -14,8 +16,6 @@ String crosssense_update(String frameJson) {
 }
 
 void setup() {
-  for (int pin:LED_PINS) {pinMode(pin,OUTPUT);digitalWrite(pin,HIGH);}
-  digitalWrite(LED3_R,LOW);digitalWrite(LED4_R,LOW);
   Bridge.begin();
   Bridge.provide_safe("crosssense_update",crosssense_update);
 }
