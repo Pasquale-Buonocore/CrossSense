@@ -4,13 +4,14 @@
 |---|---|---|---|
 | Gaetano — Visione | YOLO26n, tracking, ID persistenti, ROI e osservazioni | Snapshot validi/unknown da video o camera | `vision/`, asset locali |
 | Pasquale — STM32 / real-time | FSM, LED/buzzer, protezione, watchdog e rischio | Ciclo completo da osservazioni sintetiche, test di timeout | `firmware/`, sketch app finale |
-| Due persone jolly | Supporto flessibile su integrazione Linux–Bridge, dashboard, hardware, calibrazione, scenari e validazione | Sbloccare le dipendenze e verificare l’integrazione | `dashboard/`, `simulation/`, Python app finale e documenti hardware |
+| Matteo — Dashboard | Dashboard, telemetria e statistiche; coordinamento integrazione Linux–Bridge | Stato reale MCU, allarmi e metriche, anche senza camera | `dashboard/`, Python app finale |
+| Quarta persona — Jolly | Supporto flessibile su hardware, calibrazione, integrazione, scenari e validazione | Sbloccare le dipendenze e verificare l’integrazione | `simulation/`, documenti hardware e supporto alle altre aree |
 
-Gaetano e Pasquale concordano il [contratto delle osservazioni](../protocol/README.md): coordinate, timestamp, validità, occupazione e tracce perse. Pasquale valida le variazioni dei tempi del controller. I due jolly si assegnano di volta in volta le attività più urgenti, indicando chi segue ogni integrazione; non hanno aree esclusive fisse.
+Gaetano e Pasquale concordano il [contratto delle osservazioni](../protocol/README.md): coordinate, timestamp, validità, occupazione e tracce perse. Pasquale valida le variazioni dei tempi del controller. Matteo segue la dashboard e coordina la telemetria Linux–Bridge. La quarta persona resta jolly e supporta le attività più urgenti. Gaetano acquisisce e traccia su Linux; Pasquale riceve posizioni, ID, classe, confidenza, zone e validità con timestamp e calcola sul RT velocità, direzione e rischio.
 
 ## Sequenza
 
-| Ore | Gaetano | Pasquale | Attività disponibili per i due jolly | Traguardo comune |
+| Ore | Gaetano | Pasquale | Matteo e supporto del jolly | Traguardo comune |
 |---|---|---|---|---|
 | 0–2 | Camera e frame/replay | Smoke Bridge e mappa GPIO | Ambiente, contratto, alimentazione e componenti | Scheda accessibile, camera o fallback identificato |
 | 2–6 | Benchmark YOLO26n + ROI | FSM con input sintetici | Adapter, telemetria, cablaggio e test invarianti | Protocollo e parametri congelati |
@@ -24,7 +25,7 @@ Gaetano e Pasquale concordano il [contratto delle osservazioni](../protocol/READ
 
 - Un solo responsabile compila/carica firmware sulla UNO Q alla volta. Caricare uno sketch può interrompere l'app in corso.
 - Gli altri sviluppano con replay e fixture condivise; evitare che più processi acquisiscano la stessa camera.
-- Protocollo e parametri modificati insieme e con review di Gaetano, Pasquale e del jolly che segue l’integrazione; documentare mappa pin prima dei GPIO.
+- Protocollo e parametri modificati insieme e con review di Gaetano, Pasquale e di Matteo per l’integrazione; documentare mappa pin prima dei GPIO.
 - Finestra di integrazione almeno ogni 2–3 ore, non a fine hackathon.
 - Se entro ora 2 non c'è un frame live, attivare replay in parallelo alla diagnosi hardware. Dichiarare la modalità usata.
 - Se entro ora 6 YOLO non sostiene la latenza necessaria, ridurre risoluzione/frequenza e misurare; concordare l'eventuale ripiego.

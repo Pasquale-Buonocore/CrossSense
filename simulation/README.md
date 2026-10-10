@@ -1,1 +1,1 @@
-Attività per i due jolly, assegnate secondo le priorità: hardware, scenari ripetibili, test di guasto, replay e confronto con ciclo fisso. Prima replay deterministico; SUMO è una seconda priorità. Coordinamento con Gaetano e Pasquale.
+Attività per la quarta persona jolly, assegnate secondo le priorità: hardware, scenari ripetibili, test di guasto, replay e confronto con ciclo fisso. Prima replay deterministico; SUMO è una seconda priorità. Coordinamento con Gaetano, Pasquale e Matteo.
