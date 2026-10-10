@@ -10,6 +10,10 @@ dist/
 *.mp4
 !simulation/output/
 !simulation/output/*
+!simulation/postProcessingVideo.mp4
+!simulation/fotoRealVideo.mp4
+!output/postProcessingVideo.mp4
+!output/fotoRealVideo.mp4
 *.avi
 *.mov
 *.mkv

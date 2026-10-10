@@ -108,7 +108,7 @@ def get_app_vehicle_x(y):
 
 
 def overlay_rgba(background_img, sprite, center_x, center_y, scale=1.0):
-    """Sovrappone uno sprite RGBA sullo sfondo RGBA."""
+    """Sovrapposizione standard diretta (modalità classica)."""
     if scale <= 0.05:
         return
     orig_w, orig_h = sprite.size
@@ -118,6 +118,120 @@ def overlay_rgba(background_img, sprite, center_x, center_y, scale=1.0):
     top_left_x = int(center_x - new_w // 2)
     top_left_y = int(center_y - new_h // 2)
     background_img.alpha_composite(resized, (top_left_x, top_left_y))
+
+
+# ==============================================================================
+# PIPELINE DI RENDERING AVANZATO: POST-PROCESSING & FOTOREALISMO
+# ==============================================================================
+
+def draw_contact_shadow(draw, center_x, center_y, sprite_w, sprite_h, is_vehicle=False, opacity=120):
+    """
+    Disegna l'ombra di contatto reale proiettata a terra sul manto stradale.
+    La luce del sole proviene dall'alto-sinistra; l'ombra si allunga verso il basso-destra.
+    """
+    if is_vehicle:
+        # Ombra di un veicolo: sagoma ampia sotto il telaio e le 4 ruote
+        shadow_w = int(sprite_w * 0.95)
+        shadow_h = int(sprite_h * 0.28)
+        # Offset verso il basso e leggermente a destra (coerente con l'illuminazione della scena)
+        s_cx = int(center_x + sprite_w * 0.04)
+        s_cy = int(center_y + sprite_h * 0.42)
+    else:
+        # Ombra di un pedone / carrozzina: ellisse concentrata sotto la base dei piedi
+        shadow_w = int(sprite_w * 0.70)
+        shadow_h = int(sprite_h * 0.16)
+        s_cx = int(center_x + sprite_w * 0.05)
+        s_cy = int(center_y + sprite_h * 0.45)
+
+    bbox = [s_cx - shadow_w // 2, s_cy - shadow_h // 2,
+            s_cx + shadow_w // 2, s_cy + shadow_h // 2]
+    # Tonalità scura dell'asfalto (ombra morbida)
+    draw.ellipse(bbox, fill=(15, 18, 20, opacity))
+
+
+def harmonize_sprite(sprite, mode="post"):
+    """
+    Armonizzazione cromatica e tonale dello sprite per integrarlo nel background reale:
+    - Adatta il contrasto e la luminosità per eliminare l'effetto 'ritaglio'
+    - Se mode=='fotoreal', sfuma leggermente i contorni per fusione perfetta col sensore
+    """
+    # Converti in RGBA numpy
+    arr = np.array(sprite, dtype=np.float32)
+    alpha = arr[:, :, 3] / 255.0
+    rgb = arr[:, :, :3]
+
+    if mode == "post":
+        # Leggera calibrazione dell'esposizione e del punto di nero (asfalto riflesso)
+        rgb = rgb * 0.94 + 5.0
+        # Aumenta coerenza con la luce diffusa
+        rgb[:, :, 0] *= 0.98  # R
+        rgb[:, :, 2] *= 1.02  # B leggermente freddo
+    elif mode == "fotoreal":
+        # Fusione tonale più profonda, micro-abbassamento saturazione da telecamera stradale
+        gray = np.mean(rgb, axis=2, keepdims=True)
+        rgb = rgb * 0.88 + gray * 0.12  # desaturazione parziale 12%
+        rgb = rgb * 0.92 + 8.0
+
+    np.clip(rgb, 0, 255, out=rgb)
+    arr[:, :, :3] = rgb
+
+    if mode == "fotoreal":
+        # Ammorbidimento bordi alpha (anti-aliasing subpixel ottico)
+        alpha_blurred = cv2.GaussianBlur(alpha, (3, 3), 0.5)
+        arr[:, :, 3] = alpha_blurred * 255.0
+
+    return Image.fromarray(arr.astype(np.uint8), mode="RGBA")
+
+
+def apply_cctv_sensor_effects(frame_bgr, mode="post", frame_idx=0):
+    """
+    Emulazione ottica ed elettronica di una vera telecamera di videosorveglianza semaforica:
+    - Grana del sensore CMOS (Sensor Noise variabile)
+    - Compressione video broadcast/RTSP realistica
+    - Leggera aberrazione cromatica periferica
+    - Vignettatura ottica della lente
+    """
+    h, w = frame_bgr.shape[:2]
+    out = frame_bgr.copy().astype(np.float32)
+
+    if mode == "post":
+        # 1. Micro-grana sensore CCTV (rumore gaussiano lieve)
+        np.random.seed((frame_idx * 17) % 100000)
+        noise = np.random.normal(0, 3.2, (h, w, 3)).astype(np.float32)
+        out = np.clip(out + noise, 0, 255)
+
+        # 2. Leggero contrasto s-curve tipico dei DSP di telecamere da palo
+        out = (out / 255.0)
+        out = (out ** 1.04) * 255.0
+        out = np.clip(out, 0, 255).astype(np.uint8)
+
+    elif mode == "fotoreal":
+        # 1. Grana ad alta frequenza tipica dei sensori 2K/4K CCTV da incrocio
+        np.random.seed((frame_idx * 23) % 100000)
+        noise = np.random.normal(0, 4.0, (h, w, 3)).astype(np.float32)
+        out = np.clip(out + noise, 0, 255)
+
+        # 2. Aberrazione cromatica sottile ai margini della lente
+        b, g, r = cv2.split(out)
+        # Shift orizzontale di 1 pixel del canale blu e rosso (dispersione ottica tipica)
+        r_shifted = np.roll(r, 1, axis=1)
+        b_shifted = np.roll(b, -1, axis=1)
+        out = cv2.merge([b_shifted, g, r_shifted])
+
+        # 3. Leggera vignettatura della lente fissa grandangolare
+        y, x = np.ogrid[:h, :w]
+        cx, cy = w / 2.0, h / 2.0
+        max_dist = np.hypot(cx, cy)
+        dist_map = np.hypot(x - cx, y - cy) / max_dist
+        vignette = 1.0 - 0.12 * (dist_map ** 2)
+        out = out * vignette[:, :, np.newaxis]
+        out = np.clip(out, 0, 255).astype(np.uint8)
+
+        # 4. Compressione dinamica tipica stream RTSP/H.264
+        # Simula la leggera perdita di micro-contrasto delle codifiche IP
+        out = cv2.bilateralFilter(out, d=3, sigmaColor=15, sigmaSpace=15)
+
+    return out
 
 
 # ==============================================================================
@@ -308,11 +422,12 @@ def build_scenario_1():
     """
     Scenario 1: Macchine ferme e pedoni che attraversano regolarmente.
     Totale attori: 2 veicoli + 4 pedoni = 6 attori (<= 8).
+    La seconda macchina entra con un distanziamento temporale e spaziale netto (spazio di sicurezza ampio).
     """
     duration = 12.0
     vehicles = [
         ScenarioVehicle("Macchina", spawn_time=0.0, mode="stop", stop_y=STOP_LINE_Y),
-        ScenarioVehicle("Macchina", spawn_time=0.2, mode="stop", stop_y=STOP_LINE_Y - QUEUE_SPACING_Y)
+        ScenarioVehicle("Macchina", spawn_time=1.8, mode="stop", stop_y=STOP_LINE_Y - (QUEUE_SPACING_Y + 40))
     ]
     pedestrians = [
         ScenarioPedestrian("Donna_LR", start_x=450, start_y=1340, target_x=EXIT_RIGHT_X, target_y=1340,
@@ -436,10 +551,18 @@ def build_scenario_5():
 # ENGINE DI RENDERING (SENZA HUD SEMAFORO)
 # ==============================================================================
 
-def render_scenario(bg_path, assets_dir, vehicles, pedestrians, duration, output_path, fps=30):
-    """Renderizza il video MP4 puro (senza HUD) per lo scenario specificato."""
+def render_scenario(bg_path, assets_dir, vehicles, pedestrians, duration, output_path, fps=30, mode="standard"):
+    """
+    Renderizza il video per lo scenario specificato.
+    Modalità supportate:
+      - 'standard': Rendering originale sprite diretto (stile attuale).
+      - 'post': Post-Processing avanzato con contact shadows, armonizzazione colori ed emulazione sensore CCTV.
+      - 'fotoreal': Fusione fotorealistica con subpixel anti-aliasing, aberrazione cromatica ottica, vignettatura e filtro lenti stradali.
+    """
     if not os.path.exists(bg_path):
         raise FileNotFoundError(f"Sfondo non trovato: {bg_path}")
+
+    from PIL import ImageDraw
 
     base_bg = Image.open(bg_path).convert("RGBA")
     orig_w, orig_h = base_bg.size
@@ -453,7 +576,7 @@ def render_scenario(bg_path, assets_dir, vehicles, pedestrians, duration, output
     if not video_writer.isOpened():
         raise RuntimeError(f"Impossibile aprire VideoWriter su {output_path}")
 
-    print(f"  [Rendering] {output_path} ({duration}s @ {fps}fps = {total_frames} frame)...")
+    print(f"  [Rendering ({mode.upper()})] {output_path} ({duration}s @ {fps}fps = {total_frames} frame)...")
 
     for f_idx in range(total_frames):
         current_time = f_idx * dt
@@ -471,24 +594,57 @@ def render_scenario(bg_path, assets_dir, vehicles, pedestrians, duration, output
         for v in vehicles:
             vx, vy, vscale, vvis = v.get_pose()
             if vvis and vx is not None and vy is not None:
-                poses.append((v.sprite_name, vx, vy, vscale))
+                poses.append((v.sprite_name, vx, vy, vscale, True))
 
         for p in pedestrians:
             px, py, pscale, pvis = p.get_pose(current_time)
             if pvis and px is not None and py is not None:
-                poses.append((p.sprite_name, px, py, pscale))
+                poses.append((p.sprite_name, px, py, pscale, False))
 
         # Ordinamento prospettico Y (lontani disegnati prima)
         poses.sort(key=lambda item: item[2])
 
-        # Composizione sprite
-        for s_name, x, y, scale in poses:
-            if s_name in sprites:
-                overlay_rgba(frame_canvas, sprites[s_name], x, y, scale=scale)
+        if mode in ("post", "fotoreal"):
+            # 1. PASSAGGIO OMBRE: Proiezione a terra delle ombre di contatto su layer trasparente
+            shadow_layer = Image.new("RGBA", (orig_w, orig_h), (0, 0, 0, 0))
+            shadow_draw = ImageDraw.Draw(shadow_layer)
+
+            for s_name, x, y, scale, is_veh in poses:
+                if s_name in sprites:
+                    sp = sprites[s_name]
+                    sw = int(sp.size[0] * scale)
+                    sh = int(sp.size[1] * scale)
+                    shadow_opacity = 110 if mode == "post" else 135
+                    draw_contact_shadow(shadow_draw, x, y, sw, sh, is_vehicle=is_veh, opacity=shadow_opacity)
+
+            # Sfocatura morbida delle ombre (penombra naturale)
+            shadow_arr = np.array(shadow_layer)
+            ksize = 11 if mode == "fotoreal" else 7
+            shadow_arr = cv2.GaussianBlur(shadow_arr, (ksize, ksize), 0)
+            shadow_layer = Image.fromarray(shadow_arr, mode="RGBA")
+            frame_canvas.alpha_composite(shadow_layer)
+
+            # 2. PASSAGGIO SPRITE ARMONIZZATI
+            for s_name, x, y, scale, is_veh in poses:
+                if s_name in sprites:
+                    raw_sp = sprites[s_name]
+                    harmonized_sp = harmonize_sprite(raw_sp, mode=mode)
+                    overlay_rgba(frame_canvas, harmonized_sp, x, y, scale=scale)
+
+        else:
+            # MODALITÀ STANDARD (attuale, sprite diretti)
+            for s_name, x, y, scale, is_veh in poses:
+                if s_name in sprites:
+                    overlay_rgba(frame_canvas, sprites[s_name], x, y, scale=scale)
 
         # Scrittura frame video (senza alcun HUD)
         frame_rgb = frame_canvas.convert("RGB")
         frame_bgr = cv2.cvtColor(np.array(frame_rgb), cv2.COLOR_RGB2BGR)
+
+        # 3. PASSAGGIO EFFETTI SENSORE CCTV / TELECAMERA STRADALE
+        if mode in ("post", "fotoreal"):
+            frame_bgr = apply_cctv_sensor_effects(frame_bgr, mode=mode, frame_idx=f_idx)
+
         video_writer.write(frame_bgr)
 
         if (f_idx + 1) % 45 == 0 or (f_idx + 1) == total_frames:
@@ -503,7 +659,10 @@ def main():
     parser = argparse.ArgumentParser(description="CrossSense - Generatore 5 Scenari Dimostrativi")
     parser.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 5], help="Numero scenario (1-5)")
     parser.add_argument("--all", action="store_true", help="Genera tutti i 5 scenari")
-    parser.add_argument("--fps", type=int, default=30, help="Framerate")
+    parser.add_argument("--fps", type=int, default=15, help="Framerate (default: 15)")
+    parser.add_argument("--mode", type=str, choices=["standard", "post", "fotoreal"], default="standard",
+                        help="Modalità rendering: standard (attuale), post (post-processing CCTV), fotoreal (fotorealistico ottico)")
+    parser.add_argument("--output", type=str, default=None, help="Percorso file output personalizzato")
 
     args = parser.parse_args()
 
@@ -525,15 +684,18 @@ def main():
     }
 
     print("\n" + "="*70)
-    print("🎬 CROSSSENSE — GENERATORE DEI 5 SCENARI (SENZA HUD SEMAFORO)")
+    print(f"🎬 CROSSSENSE — GENERATORE SCENARI (MODALITÀ: {args.mode.upper()})")
     print("="*70)
 
     for sc_num in scenarios_to_run:
         builder, title = scenario_builders[sc_num]
-        output_dir = os.path.join(SIM_DIR, "output")
-        os.makedirs(output_dir, exist_ok=True)
-        out_filename = f"output_{sc_num}.mp4"
-        out_path = os.path.join(output_dir, out_filename)
+        if args.output:
+            out_path = args.output
+        else:
+            output_dir = os.path.join(SIM_DIR, "output")
+            os.makedirs(output_dir, exist_ok=True)
+            out_filename = f"output_{sc_num}.mp4"
+            out_path = os.path.join(output_dir, out_filename)
 
         print(f"\n▶ SCENARIO {sc_num}: {title}")
         vehicles, pedestrians, duration = builder()
@@ -544,7 +706,8 @@ def main():
             pedestrians=pedestrians,
             duration=duration,
             output_path=out_path,
-            fps=args.fps
+            fps=args.fps,
+            mode=args.mode
         )
 
     print("\n" + "="*70)
