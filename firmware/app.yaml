@@ -1,5 +1,6 @@
-name: CrossSense Linux LED Counter
-description: Comandi LED da Linux e contatore dei cambiamenti restituito dalla STM32
-icon: 💡
-ports: []
+name: CrossSense RT Bridge
+description: Bridge v1 dashboard e ricevitore STM32 in arresto protetto
+icon: 🚦
+ports:
+  - 8081
 bricks: []
