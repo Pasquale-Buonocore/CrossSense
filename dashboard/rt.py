@@ -4,6 +4,7 @@ import json
 import secrets
 import threading
 import time
+from collections import deque
 
 LIMIT = 900
 PHASES = ('VEHICLE_GREEN', 'VEHICLE_YELLOW', 'ALL_RED_TO_PED', 'PED_GREEN', 'PED_CLEARANCE', 'ALL_RED_TO_VEH', 'PROTECTED_STOP', 'FAULT')
@@ -39,7 +40,7 @@ def validate_frame(f):
         ids.add(t[0])
         if not (t[3] is None and t[4] is None) and not all(integer(v,-1000000,1000000) for v in t[3:]):
             raise ValueError('Coordinate non valide')
-        if (t[2] == 'crossing' and f['crossing'] == 'clear') or (t[1] == 'vehicle' and t[2] == 'approach' and f['approach'] == 'clear'):
+        if (t[1] != 'vehicle' and t[2] == 'crossing' and f['crossing'] == 'clear') or (t[1] == 'vehicle' and t[2] == 'approach' and f['approach'] == 'clear'):
             raise ValueError('Traccia e ROI incoerenti')
     if f['time_ms'] is None:
         if f['age_ms'] is not None or f['valid'] or f['tracks'] or f['crossing'] != 'unknown' or f['approach'] != 'unknown':
@@ -103,6 +104,19 @@ class RTService:
         self.in_flight = False
         self.last_wire = None
         self.rpc_ms = None
+        self.events = deque(maxlen=100)
+        self.event_sequence = 0
+
+    def event(self, kind, message):
+        self.event_sequence += 1
+        self.events.append({'id':self.event_sequence,'type':kind,'message':message})
+
+    def cancel_requests(self, reason):
+        for result in self.seen.values():
+            if result['status'] not in ('served','cancelled'):
+                result.update(status='cancelled',reason=reason)
+        self.requests = [False]*3
+        self.lowering = False
 
     def publish(self, frame):
         f = copy.deepcopy(validate_frame(frame))
@@ -115,9 +129,7 @@ class RTService:
                 if not 0 < delta < 0x80000000 or (f['time_ms'] is not None and old['time_ms'] is not None and f['time_ms'] <= old['time_ms']):
                     raise ValueError('Frame vecchio o duplicato')
             elif self.latest:
-                self.requests = [False]*3
-                self.lowering = False
-                self.seen.clear()
+                self.cancel_requests('Sorgente o configurazione cambiata')
                 self.stream = secrets.randbits(32)
                 self.sequence = 0
             self.latest = (f,self.clock())
@@ -125,7 +137,8 @@ class RTService:
     def snapshot(self):
         with self.lock:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
-            return {'connected':self.call is not None and age is not None and age < 1000 and self.error is None,'age_ms':age,'state':copy.deepcopy(self.state),'error':self.error,'rpc_ms':self.rpc_ms,'sent_age_ms':self.last_wire.get('age_ms') if self.last_wire else None}
+            return {'connected':self.call is not None and age is not None and age < 1000 and self.error is None,'age_ms':age,'state':copy.deepcopy(self.state),'error':self.error,'rpc_ms':self.rpc_ms,'sent_age_ms':self.last_wire.get('age_ms') if self.last_wire else None,
+                    'requests':copy.deepcopy(list(self.seen.values())), 'events':list(self.events)}
 
     def request(self, kind, request_id):
         if kind not in ('pedestrian','accessible','vehicle_priority') or not isinstance(request_id,str) or not 1 <= len(request_id) <= 80:
@@ -135,11 +148,9 @@ class RTService:
                 return self.seen[request_id]
             if self.call is None or self.received is None or self.clock()-self.received >= 1 or self.error is not None:
                 return {'status':'rejected','reason':'Telemetria non disponibile'}
-            if self.lowering or self.in_flight:
-                return {'status':'rejected','reason':'Attendere conferma reset richiesta'}
             self.requests[('pedestrian','accessible','vehicle_priority').index(kind)] = True
             if kind == 'accessible': self.requests[0] = True
-            result = {'status':'queued','requestId':request_id}
+            result = {'status':'queued','requestId':request_id,'type':kind}
             self.seen[request_id] = result
             if len(self.seen) > 256: self.seen.pop(next(iter(self.seen)))
             return result
@@ -159,7 +170,7 @@ class RTService:
                 # watchdog. A changed request needs a new acquisition/message.
                 self.sequence = (self.sequence+1) & 0xffffffff
                 if getattr(self,'last_sent',None) == (f['stream'],f['frame']):
-                    if self.last_wire is not None and self.requests == self.last_wire['requests']:
+                    if self.last_wire is not None:
                         age = f['age_ms']
                         f = copy.deepcopy(self.last_wire)
                         if f['time_ms'] is not None: f['age_ms'] = age
@@ -168,25 +179,67 @@ class RTService:
                 else:
                     self.last_sent = (f['stream'],f['frame'])
                     f['stream'], f['frame'] = self.stream, self.sequence
-            levels = list(self.requests)
-            f['requests'] = levels
+            # Duplicate acquisitions keep identical request levels. A button
+            # waits for the next real frame instead of injecting INVALID_DATA.
+            duplicate = self.last_wire is not None and (f['stream'],f['frame']) == (self.last_wire['stream'],self.last_wire['frame'])
+            if not duplicate: f['requests'] = [False]*3 if self.lowering else list(self.requests)
+            levels = list(f['requests'])
+            if not duplicate:
+                self.wire_request_ids = [key for key,r in self.seen.items() if r['status']=='queued' and levels[('pedestrian','accessible','vehicle_priority').index(r['type'])]]
+                self.wire_acknowledged = False
+            request_ids = list(getattr(self,'wire_request_ids',[]))
+            source_stream = self.stream
             self.last_wire = copy.deepcopy(f)
             self.in_flight = True
         start = self.clock()
+        transport_resets = getattr(self.call,'resets',0)
         try:
             s = validate_state(self.call('crosssense_update',encode(validate_frame(f))),f['frame'])
             self.rpc_ms = round((self.clock()-start)*1000,1)
             if self.rpc_ms > 250:
                 raise ValueError('RPC oltre budget 250 ms')
             with self.lock:
+                if source_stream != self.stream:
+                    return  # Response belongs to a source invalidated mid-call.
+                if self.state is not None and 0 < ((self.state['uptime_ms']-s['uptime_ms']) & 0xffffffff) < 0x80000000:
+                    self.cancel_requests('Controller riavviato')
+                    self.stream = secrets.randbits(32)
+                    self.last_sent = None
+                    self.event('RESTART','Controller riavviato: richieste annullate')
+                    request_ids = []
+                previous_phase = self.state['phase'] if self.state else None
+                previous_alarms = set(self.state['alarms']) if self.state else set()
+                if s['phase'] != previous_phase: self.event('PHASE',s['phase'])
+                for alarm in set(s['alarms'])-previous_alarms: self.event('ALARM',alarm)
                 self.state, self.received, self.error = s,self.clock(),None
-                if s['ok']:
+                if s['ok'] and not getattr(self,'wire_acknowledged',False):
+                    self.wire_acknowledged = True
+                    for key in request_ids:
+                        self.seen[key].update(status='accepted',stream=f['stream'],frame=f['frame'])
                     if any(levels):
-                        self.requests = [False]*3
                         self.lowering = True
                     else: self.lowering = False
+                    # A click may arrive while this RPC is running or while
+                    # the previous edge is being lowered. Keep those queued
+                    # commands for the next edge instead of dropping them.
+                    self.requests = [False]*3
+                    for result in self.seen.values():
+                        if result['status']=='queued':
+                            self.requests[('pedestrian','accessible','vehicle_priority').index(result['type'])] = True
+                            if result['type']=='accessible': self.requests[0] = True
+                for result in self.seen.values():
+                    if result['status']=='accepted' and result['stream']==s['applied_stream'] and s['applied_frame'] is not None and ((s['applied_frame']-result['frame']) & 0xffffffff)<0x80000000:
+                        result['status']='applied'
+                    if result['status']=='applied' and s['observation_valid'] and ((result['type']=='vehicle_priority' and s['phase']=='VEHICLE_GREEN') or (result['type']!='vehicle_priority' and s['phase']=='PED_GREEN' and previous_phase!='PED_GREEN')):
+                        result['status']='served'
         except Exception as exc:
-            with self.lock: self.error = str(exc)
+            with self.lock:
+                self.error = str(exc)
+                if getattr(self.call,'resets',0) != transport_resets:
+                    self.cancel_requests('Trasporto riavviato')
+                    self.stream = secrets.randbits(32)
+                    self.last_sent = None
+                    self.event('RESTART','Trasporto riavviato: recupero con nuovo stream')
         finally:
             with self.lock: self.in_flight = False
 

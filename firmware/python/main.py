@@ -26,7 +26,8 @@ if __name__=='__main__':
         assets=source.parent/'vision'/'assets'
         config=json.loads(source.read_text())
         sys.argv+=['--video',str(assets/config.get('video','input.mp4')),'--model',str(assets/config.get('model','yolo26n.pt')),
-                   '--imgsz',str(config.get('imgsz',360)),'--frame-size',str(config.get('frame_size',360))]
+                   '--imgsz',str(config.get('imgsz',320)),'--frame-size',str(config.get('frame_size',480)),
+                   '--confidence',str(config.get('confidence',.30))]
         if config.get('loop'): sys.argv+=['--loop-video']
         if config.get('inference_threads'): sys.argv+=['--inference-threads',str(config['inference_threads'])]
         if config.get('video_directory'): sys.argv+=['--video-dir',str(assets/config['video_directory'])]

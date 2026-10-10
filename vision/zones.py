@@ -55,8 +55,7 @@ def validate_config(config):
 
 
 def default_config():
-    raw = json.loads((Path(__file__).parent/'config'/'gaetano-zones.json').read_text())
-    return validate_config({'zones':{name:[[x/raw['width'],y/raw['height']] for x,y in raw['zones'][old]] for name,old in zip(ZONE_NAMES,GAETANO_NAMES)},'tolerance':12/min(raw['width'],raw['height'])})
+    return validate_config(json.loads((Path(__file__).parent/'config'/'replay-zones.json').read_text()))
 
 
 def signed_distance(point, polygon):

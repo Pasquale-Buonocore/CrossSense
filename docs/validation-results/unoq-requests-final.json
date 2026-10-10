@@ -1,0 +1,32 @@
+{
+  "config": {
+    "default_mode": "hardware",
+    "controller": "bridge",
+    "source": "replay"
+  },
+  "reports": [
+    {
+      "requests": [
+        {
+          "type": "accessible",
+          "status": "served",
+          "seconds": 9.83,
+          "remaining_ms": 7855
+        },
+        {
+          "type": "vehicle_priority",
+          "status": "served",
+          "seconds": 10.11,
+          "remaining_ms": null
+        },
+        {
+          "type": "pedestrian",
+          "status": "served",
+          "seconds": 8.17,
+          "remaining_ms": 4463
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

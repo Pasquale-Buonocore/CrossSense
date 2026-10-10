@@ -1,3 +1,5 @@
+> Documento storico. Il perimetro corrente è replay dichiarato e segnali soltanto nella dashboard. Riferimenti aggiornati: README principale e docs/architecture.md. Le affermazioni di verifica sotto riportate appartengono alle prove precedenti.
+
 # Storico di sviluppo STM32
 
 Il [piano corrente](README.md) contiene lo stato aggiornato. Le voci seguenti conservano le decisioni della sessione del 10 ottobre 2026, nell'ordine della discussione; non assegnano orari non registrati.

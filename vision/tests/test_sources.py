@@ -14,13 +14,22 @@ class SourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);videos=root/'videos';videos.mkdir()
             for name in ('one.mp4','two.mp4'): (videos/name).touch()
-            (root/'outside.mp4').touch();(videos/'link.mp4').symlink_to(root/'outside.mp4')
+            (root/'outside.mp4').touch()
             catalog=VideoCatalog(videos,root/'selected.json')
             self.assertEqual(list(catalog.files()),['one.mp4','two.mp4'])
             for name in ('../outside.mp4',str(root/'outside.mp4'),'link.mp4','missing.mp4'):
                 with self.assertRaises(ValueError):catalog.select({'video':name})
             catalog.select({'video':'two.mp4'})
             self.assertEqual(VideoCatalog(videos,root/'selected.json').initial(None),(videos/'two.mp4').resolve())
+
+    def test_symlinks_excluded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); videos=root/'videos'; videos.mkdir(); (root/'outside.mp4').touch()
+            try: (videos/'link.mp4').symlink_to(root/'outside.mp4')
+            except OSError as exc:
+                if getattr(exc,'winerror',None)==1314: self.skipTest('Windows: privilegio symlink non disponibile')
+                raise
+            self.assertEqual(VideoCatalog(videos).files(),{})
 
     def test_switch_discards_in_flight_result_and_resets_tracker(self):
         with tempfile.TemporaryDirectory() as folder:

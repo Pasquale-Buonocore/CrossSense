@@ -36,5 +36,15 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'hardware',im
  now=700;await view.refresh();
  assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','actual stale observations must still be visible');
  assert.match(get('vision-description').textContent,/— FPS/);
+ failMetadata=false;
+ let finish;
+ const oldFetch=context.fetch;
+ context.fetch=async(path,options)=>options?.method==='POST'?new Promise(resolve=>{finish=resolve;}):oldFetch(path,options);
+ const change=view.changeVideo();
+ assert.equal(view.changingVideo,true);
+ assert.equal(view.data.fresh,false,'changing source invalidates old observations immediately');
+ assert.equal(view.data.frame,null,'old detections must not enable a command for a new source');
+ finish({ok:true,json:async()=>({available:true,status:'loading',fresh:false,source:'next.mp4',videos:[],frame:null})});
+ await change;assert.equal(view.changingVideo,false);
  console.log('VISION_UI_OK: metadata polls during JPEG loads, eviction preserves observations, genuine staleness still displayed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,60 @@
+{
+  "checks": [
+    {
+      "check": "blocked_bridge_worker_restarted",
+      "events": [
+        {
+          "id": 85,
+          "type": "PHASE",
+          "message": "PED_CLEARANCE"
+        },
+        {
+          "id": 86,
+          "type": "PHASE",
+          "message": "ALL_RED_TO_VEH"
+        },
+        {
+          "id": 87,
+          "type": "PHASE",
+          "message": "VEHICLE_GREEN"
+        },
+        {
+          "id": 88,
+          "type": "RESTART",
+          "message": "Trasporto riavviato: recupero con nuovo stream"
+        }
+      ],
+      "stream": 1624904566
+    },
+    {
+      "check": "linux_pause_watchdog_and_recovery",
+      "fault": "TIMEOUT",
+      "state": {
+        "frame": 1,
+        "ok": false,
+        "error": "BAD_DATA",
+        "applied_stream": 1624904566,
+        "applied_frame": 5,
+        "uptime_ms": 621692,
+        "phase": "FAULT",
+        "remaining_ms": null,
+        "vehicle_light": "RED",
+        "pedestrian_light": "RED",
+        "buzzer": false,
+        "beacon": false,
+        "observation_valid": false,
+        "fault": "TIMEOUT",
+        "alarms": [],
+        "estimates": []
+      }
+    },
+    {
+      "check": "invalid_video_error_and_recovery",
+      "error": "Impossibile aprire il video"
+    },
+    {
+      "check": "linux_process_restart",
+      "new_stream": 5646695
+    }
+  ]
+}

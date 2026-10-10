@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "catalog_path_rejected",
+    "replay_owns_observations",
+    "cross_origin_write_rejected",
+    "roi_save_revision_conflict_and_readback",
+    "replay_restart_contract",
+    "request_id_deduplicated",
+    "source_change_cancels_pending_request"
+  ]
+}

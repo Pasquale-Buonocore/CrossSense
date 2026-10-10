@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "seconds": 70.0,
+  "streams": [
+    3094139752,
+    4105384113
+  ],
+  "resumed_video_frame": 1,
+  "new_wire_stream": 3068542778,
+  "phase": "VEHICLE_GREEN",
+  "metrics": {
+    "completed": 0,
+    "left_to_right": 0,
+    "right_to_left": 0,
+    "average_wait_ms": 1200,
+    "wait_samples": 3,
+    "time_basis": "video",
+    "stopped_ids": [],
+    "counting_available": true,
+    "events": []
+  }
+}

@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import shutil
+import hashlib
 
 root=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
@@ -14,12 +15,14 @@ parser.add_argument('--video-dir',type=Path,help='Includi tutti gli MP4 della ca
 parser.add_argument('--model',type=Path,default=root/'models'/'yolo26n.pt')
 parser.add_argument('--zones-file',type=Path,help='Configurazione salvata dalla dashboard da usare nella app')
 parser.add_argument('--loop-video',action='store_true')
-parser.add_argument('--imgsz',type=int,default=360)
+parser.add_argument('--imgsz',type=int,default=320)
 parser.add_argument('--inference-threads',type=int,choices=range(1,5))
-parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=360)
+parser.add_argument('--confidence',type=float,default=.30)
+parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=480)
 parser.add_argument('--zip',action='store_true',help='Crea anche uno ZIP importabile in Arduino App Lab')
 args=parser.parse_args()
 if not 32 <= args.imgsz <= 2048 or not 32 <= args.frame_size <= 2160: parser.error('Risoluzione non valida')
+if not 0 < args.confidence <= 1: parser.error('Confidenza non valida')
 has_video=bool(args.video or args.video_dir)
 if args.standard_cycle and has_video: parser.error('Usare --controller-cycle con video: due produttori di osservazioni non possono coesistere')
 if args.video and not args.video.is_file(): parser.error('Video assente')
@@ -35,7 +38,7 @@ shutil.copytree(root/'vision',args.destination/'python'/'vision',ignore=shutil.i
 if has_video:
     assets=args.destination/'python'/'vision'/'assets'
     assets.mkdir()
-    source={'loop':args.loop_video,'imgsz':args.imgsz,'frame_size':args.frame_size}
+    source={'loop':args.loop_video,'imgsz':args.imgsz,'frame_size':args.frame_size,'confidence':args.confidence}
     if args.inference_threads: source['inference_threads']=args.inference_threads
     if args.video: shutil.copy2(args.video,assets/'input.mp4');source['video']='input.mp4'
     if args.video_dir:
@@ -46,11 +49,17 @@ if has_video:
         source['video_directory']='videos'
         source['video']='videos/'+videos[0].relative_to(args.video_dir).as_posix()
     model_name='yolo26n_ncnn_model' if args.model.is_dir() else 'yolo26n.pt'
-    if args.model.is_dir(): shutil.copytree(args.model,assets/model_name)
+    if args.model.is_dir(): shutil.copytree(args.model,assets/model_name,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
     else: shutil.copy2(args.model,assets/model_name)
     shutil.copy2(root/'vision'/'requirements-unoq.txt',args.destination/'python'/'requirements.txt')
     source['model']=model_name
     (args.destination/'python'/'vision-source.json').write_text(json.dumps(source))
+    manifest_assets={}
+    for asset in assets.rglob('*'):
+        if asset.is_file():
+            with asset.open('rb') as content: digest=hashlib.file_digest(content,'sha256').hexdigest()
+            manifest_assets[asset.relative_to(assets).as_posix()]={'bytes':asset.stat().st_size,'sha256':digest}
+    (args.destination/'python'/'asset-manifest.json').write_text(json.dumps({'source':'replay','configuration':source,'assets':manifest_assets},indent=2))
 if args.zones_file:
     local=args.destination/'python'/'dashboard'/'.local'
     local.mkdir(parents=True,exist_ok=True)

@@ -61,7 +61,7 @@ inline bool parse(JsonDocument& doc, Frame& f) {
       t.x=a[3];t.y=a[4];
       if (t.x < -1000000 || t.x > 1000000 || t.y < -1000000 || t.y > 1000000) return false;
     }
-    if ((t.zone==2 && f.crossing==2) || (t.kind==2 && t.zone==3 && f.approach==2)) return false;
+    if ((t.kind!=2 && t.zone==2 && f.crossing==2) || (t.kind==2 && t.zone==3 && f.approach==2)) return false;
     ++f.count;
   }
   return true;
@@ -92,6 +92,7 @@ class RTCore {
       if (reset) {
         for (uint8_t i=0;i<3;++i) {requestLevels[i]=false;pendingRequests[i]=false;}
         cycle.reset(now);
+        waitingTracked=false; waitingArmed=true; absenceTracked=false;
       }
       applied=accepted;hasApplied=true;pending=false;appliedAt=acceptedAt;
       for (uint8_t i=0;i<3;++i) {
@@ -102,7 +103,26 @@ class RTCore {
     }
     tickWatchdog(now);
     if (cycleEnabled) {
-      cycle.tick(now,observationValid,applied.crossing==2,pendingRequests[0]);
+      bool waiting=false;
+      for (uint8_t i=0;i<applied.count;++i) {
+        const Track& t=applied.tracks[i];
+        if ((t.kind==0 || t.kind==1) && (t.zone==0 || t.zone==1)) waiting=true;
+      }
+      if (!observationValid) {waitingTracked=false; absenceTracked=false;}
+      else if (waiting) {
+        absenceTracked=false;
+        if (!waitingTracked) {waitingTracked=true; waitingSince=now;}
+        if (waitingArmed && uint32_t(now-waitingSince)>=cycle.timings.waitingConfirm) {
+          pendingRequests[0]=true; waitingArmed=false;
+        }
+      } else {
+        waitingTracked=false;
+        if (!absenceTracked) {absenceTracked=true; absentSince=now;}
+        if (uint32_t(now-absentSince)>=cycle.timings.waitingRearm) waitingArmed=true;
+      }
+      const bool priority=pendingRequests[2] && cycle.phase==CyclePhase::VehicleGreen && observationValid;
+      cycle.tick(now,observationValid,applied.crossing==2,pendingRequests[0],applied.approach==1,pendingRequests[1],priority);
+      if (priority) pendingRequests[2]=false;
       if (cycle.consumePedestrian) {pendingRequests[0]=false;pendingRequests[1]=false;}
     }
   }
@@ -166,6 +186,8 @@ class RTCore {
   uint32_t acceptedAt=0,appliedAt=0;
   uint64_t captureTime=0;
   bool hasCapture=false;
+  bool waitingTracked=false, waitingArmed=true, absenceTracked=false;
+  uint32_t waitingSince=0, absentSince=0;
   static bool newer(uint32_t n,uint32_t old) {uint32_t d=n-old;return d!=0 && d<0x80000000UL;}
   void tickWatchdog(uint32_t now) {
     // Do not consume pending data inside the RPC callback.

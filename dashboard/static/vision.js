@@ -9,6 +9,7 @@ class VisionView {
     this.select=document.getElementById('zone-select');this.draft=null;
     this.videoSelect=document.getElementById('video-select');this.changingVideo=false;this.sourceToken=0;
     this.videoSelect.addEventListener('change',()=>this.changeVideo());
+    document.getElementById('video-retry').addEventListener('click',()=>this.changeVideo(true));
     document.getElementById('zone-edit').addEventListener('click',()=>this.toggleEditor());
     document.getElementById('zone-cancel').addEventListener('click',()=>this.closeEditor());
     document.getElementById('zone-clear').addEventListener('click',()=>{this.draft.config.zones[this.select.value]=[];this.draw();});
@@ -64,6 +65,8 @@ class VisionView {
     }
     if(!this.changingVideo)this.videoSelect.value=data?.selected_video||'';
     this.videoSelect.disabled=mode!=='hardware'||!videos.length||this.editing||this.changingVideo;
+    const retry=document.getElementById('video-retry');
+    if(retry)retry.disabled=mode!=='hardware'||!data?.available||this.editing||this.changingVideo;
     this.image.alt=mode==='hardware'?'Video elaborato con bounding box, classi e confidenze YOLO':'Frame della simulazione locale';
     document.getElementById('zone-edit').disabled=!data?.zones||this.editing;
     if(!this.editing)this.note.textContent=data?.zones?'Zone condivise · modifica i poligoni direttamente sul frame.':'Caricamento delle zone…';
@@ -88,12 +91,14 @@ class VisionView {
     }
     this.draw();
   }
-  async changeVideo(){
+  async changeVideo(restart=false){
     if(this.changingVideo||this.editing)return;
     this.changingVideo=true;this.sourceToken++;this.videoSelect.disabled=true;
+    if(this.data)this.data={...this.data,status:'loading',fresh:false,frame:null};
+    this.render(this.mode);
     const note=document.getElementById('video-note');note.textContent='Cambio video…';
     try{
-      const response=await fetch('/api/vision/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video:this.videoSelect.value})});
+      const response=await fetch(restart?'/api/vision/restart':'/api/vision/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(restart?{}:{video:this.videoSelect.value})});
       const data=await response.json();if(!response.ok)throw Error(data.error||'Cambio video non riuscito');
       this.data=data;this.serial=null;this.image.src='/api/vision/reference.jpg';
       note.textContent='Video selezionato · tracking riavviato.';

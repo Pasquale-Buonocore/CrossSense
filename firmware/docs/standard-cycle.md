@@ -1,3 +1,5 @@
+> Documento storico. Il perimetro corrente è replay dichiarato e segnali soltanto nella dashboard. Riferimenti aggiornati: README principale e docs/architecture.md. Le affermazioni di verifica sotto riportate appartengono alle prove precedenti.
+
 # Prova del ciclo standard — API dashboard e STM32
 
 La prova aggiorna i **tre semafori della dashboard**, senza pilotare GPIO o LED

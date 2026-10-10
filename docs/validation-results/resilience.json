@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "check": "blocked_bridge_worker_restarted",
+      "events": [
+        {
+          "id": 26,
+          "type": "RESTART",
+          "message": "Trasporto riavviato: recupero con nuovo stream"
+        },
+        {
+          "id": 27,
+          "type": "PHASE",
+          "message": "ALL_RED_TO_VEH"
+        },
+        {
+          "id": 28,
+          "type": "PHASE",
+          "message": "FAULT"
+        },
+        {
+          "id": 29,
+          "type": "RESTART",
+          "message": "Trasporto riavviato: recupero con nuovo stream"
+        }
+      ],
+      "stream": 4150341259
+    },
+    {
+      "check": "linux_pause_watchdog_and_recovery",
+      "fault": null
+    },
+    {
+      "check": "invalid_video_error_and_recovery",
+      "error": "Impossibile aprire il video"
+    },
+    {
+      "check": "linux_process_restart",
+      "new_stream": 3603472159
+    },
+    {
+      "check": "mcu_reflash_reconnect",
+      "upload": "ebugger 0.12.0+dev-ge6a2c12f4 (2025-05-22-15:51)\nLicensed under GNU GPL v2\nFor bug reports, read\n\thttp://openocd.org/doc/doxygen/bugs.html\ndebug_level: 2\nclock_config\n/tmp/remoteocd/zephyr-arduino_uno_q_stm32u585xx.elf\n/tmp/remoteocd/zephyr-arduino_uno_q_stm32u585xx.elf\n/tmp/remoteocd/sketch.ino.elf-zsk.bin\nInfo : Linux GPIOD JTAG/SWD bitbang driver (libgpiod v2)\nInfo : Note: The adapter \"linuxgpiod\" doesn't support configurable speed\nInfo : SWD DPIDR 0x0be12477\nInfo : [stm32u5.ap0] Examination succeed\nInfo : [stm32u5.cpu] Cortex-M33 r0p4 processor detected\nInfo : [stm32u5.cpu] target has 8 breakpoints, 4 watchpoints\nInfo : [stm32u5.cpu] Examination succeed\nInfo : [stm32u5.ap0] gdb port disabled\nInfo : [stm32u5.cpu] starting gdb server on 3333\nInfo : Listening on port 3333 for gdb connections\nCPU in Non-Secure state\n[stm32u5.cpu] halted due to debug-request, current mode: Thread \nxPSR: 0x41000000 pc: 0x08017f58 psp: 0x20002820\nInfo : device idcode = 0x30076482 (STM32U57/U58xx - Rev U : 0x3007)\nInfo : TZEN = 0 : TrustZone disabled by option bytes\nInfo : RDP level 0 (0xAA)\nInfo : flash size = 2048 KiB\nInfo : flash mode : dual-bank\nshutdown command invoked\nNew upload port:  (default)\n",
+      "events": [
+        {
+          "id": 1,
+          "type": "PHASE",
+          "message": "FAULT"
+        },
+        {
+          "id": 2,
+          "type": "PHASE",
+          "message": "ALL_RED_TO_VEH"
+        },
+        {
+          "id": 3,
+          "type": "PHASE",
+          "message": "VEHICLE_GREEN"
+        },
+        {
+          "id": 4,
+          "type": "RESTART",
+          "message": "Trasporto riavviato: recupero con nuovo stream"
+        }
+      ]
+    }
+  ]
+}

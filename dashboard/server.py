@@ -54,7 +54,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(raw)
             return
         if self.path == '/api/config':
-            self.reply({'default_mode':'hardware' if self.server.rt.call is not None or (vision and vision.video is not None) else 'demo'})
+            self.reply({'default_mode':'hardware' if self.server.rt.call is not None or (vision and vision.video is not None) else 'demo',
+                        'controller':getattr(self.server,'controller_kind','bridge' if self.server.rt.call else 'none'),'source':'replay'})
         elif self.path == '/api/trial':
             trial = getattr(self.server,'trial',None)
             self.reply(trial.snapshot() if trial is not None else {'available':False,'status':'unavailable'})
@@ -80,6 +81,10 @@ class Handler(SimpleHTTPRequestHandler):
             elif self.path == '/api/vision/source':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 self.reply(vision.select_video(data))
+            elif self.path == '/api/vision/restart':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                if data != {}: raise ValueError('Il riavvio richiede un oggetto JSON vuoto')
+                self.reply(vision.restart())
             elif self.path == '/api/trial':
                 if vision and vision.video is not None: return self.reply({'error':'Il video YOLO è la sorgente attiva'},409)
                 trial = getattr(self.server,'trial',None)
@@ -108,26 +113,32 @@ def main(on_ready=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--port',type=int,default=8080)
     parser.add_argument('--host',default='127.0.0.1')
-    parser.add_argument('--bridge',action='store_true',help='Usa arduino.app_utils sulla UNO Q')
+    transport = parser.add_mutually_exclusive_group()
+    transport.add_argument('--bridge',action='store_true',help='Usa arduino.app_utils sulla UNO Q')
+    transport.add_argument('--native-controller',type=Path,help='Eseguibile dello stesso sketch compilato per PC')
     parser.add_argument('--layout-file',type=Path,default=Path(__file__).parent/'.local'/'signal-layout.json')
     parser.add_argument('--video',type=Path,help='MP4 da elaborare con YOLO26n')
-    parser.add_argument('--video-dir',type=Path,default=Path(__file__).resolve().parents[1]/'simulation'/'output',help='Catalogo MP4 selezionabile dalla dashboard')
+    parser.add_argument('--video-dir',type=Path,help='Abilita replay e catalogo MP4 selezionabile')
     parser.add_argument('--selection-file',type=Path,default=Path(__file__).parent/'.local'/'selected-video.json')
     parser.add_argument('--model',type=Path,default=Path(__file__).resolve().parents[1]/'models'/'yolo26n.pt')
     parser.add_argument('--zones-file',type=Path,default=Path(__file__).parent/'.local'/'vision-zones.json')
     parser.add_argument('--loop-video',action='store_true',help='Ripeti il video con un nuovo stream e tracker')
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--confidence',type=float,default=.30)
-    parser.add_argument('--imgsz',type=int,default=360)
+    parser.add_argument('--imgsz',type=int,default=320)
     parser.add_argument('--inference-threads',type=int,choices=range(1,5),help='Thread NCNN; lascia risorse a Bridge e dashboard')
-    parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=360,help='Limite di entrambi i lati dei frame elaborati, rapporto conservato')
+    parser.add_argument('--frame-size','--frame-height',dest='frame_size',type=int,default=480,help='Limite di entrambi i lati dei frame elaborati, rapporto conservato')
     args = parser.parse_args()
     if not 0 < args.confidence <= 1 or not 32 <= args.imgsz <= 2048 or not 32 <= args.frame_size <= 2160: parser.error('Confidenza o risoluzione non valida')
     layout = LayoutStore(args.layout_file)
     call = None
     if args.bridge:
-        from arduino.app_utils import Bridge
-        call = Bridge.call
+        from native import BridgeController
+        call = BridgeController()
+    elif args.native_controller:
+        from native import NativeController
+        if not args.native_controller.is_file(): parser.error('Controller nativo assente: eseguire scripts/build_native.py')
+        call = NativeController(args.native_controller)
     rt = RTService(call)
     vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file,inference_threads=args.inference_threads)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
@@ -135,15 +146,23 @@ def main(on_ready=None):
         server.rt = rt
         server.layout = layout
         server.vision = vision
+        server.controller_kind = 'native' if args.native_controller else 'bridge' if args.bridge else 'none'
         rt.start()
         print(f'CrossSense: http://{args.host}:{args.port}',flush=True)
         try:
-            vision.start()
+            try:
+                vision.start()
+            except ValueError as exc:
+                vision.status, vision.error = 'error', str(exc)
+                vision.unavailable()
             if on_ready is not None: on_ready(server)
             server.serve_forever()
         finally:
             vision.stop.set()
             rt.stop.set()
+            if vision.thread: vision.thread.join(timeout=2)
+            if rt.thread: rt.thread.join(timeout=1)
+            if args.native_controller or args.bridge: call.close()
 
 
 if __name__ == '__main__': main()

@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "startup_clear_recovery",
+    "pedestrian_request_cycle",
+    "occupied_clearance_timeout_keeps_red",
+    "priority_cannot_release_occupied_crossing",
+    "clearance_timeout_recovery",
+    "accessible_green_eight_seconds",
+    "green_vehicle_crossing_conflict",
+    "duplicate_does_not_refresh_watchdog",
+    "stale_frame_rejected",
+    "inconsistent_clear_frame_rejected",
+    "invalid_observation_protected_stop",
+    "new_stream_clear_recovery"
+  ],
+  "sample_count": 201
+}

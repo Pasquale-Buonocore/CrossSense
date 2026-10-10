@@ -18,6 +18,11 @@ def detection(i=1, kind='pedestrian', zone='crossing'):
 
 
 class ObservationTests(unittest.TestCase):
+    def test_vehicle_transit_is_not_pedestrian_occupancy(self):
+        f=observation(1,1,100,[detection(1,'vehicle','crossing')])
+        validate_frame(f)
+        self.assertEqual(f['crossing'],'clear')
+
     def test_full_protocol_and_no_pixel_coordinates(self):
         f=observation(123,7,100,[detection(),detection(2,'vehicle','approach')])
         validate_frame(f)

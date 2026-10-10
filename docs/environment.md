@@ -1,3 +1,5 @@
+> Documento storico. Il perimetro corrente è replay dichiarato e segnali soltanto nella dashboard. Riferimenti aggiornati: README principale e docs/architecture.md. Le affermazioni di verifica sotto riportate appartengono alle prove precedenti.
+
 # Ambiente verificato — 10 ottobre 2026
 
 ## Mac

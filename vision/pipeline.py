@@ -2,17 +2,20 @@
 import copy
 from collections import OrderedDict, deque
 from pathlib import Path
+import os
 import secrets
 import threading
 import time
 from .zones import classify_position
 from .sources import VideoCatalog
+from .events import CrossingEvents
+from .identity import IdentityTracker, deduplicate_users
 
 CLASSES = {0:('pedestrian','PEDONE'),1:('bicycle','BICICLETTA'),2:('vehicle','AUTO'),3:('vehicle','MOTO'),5:('vehicle','AUTOBUS'),7:('vehicle','CAMION')}
 
 
 def observation(stream, sequence, captured_ms, detections, usable=True):
-    crossing = any(d['zone'] == 'crossing' for d in detections)
+    crossing = any(d['zone'] == 'crossing' and d['class'] != 'vehicle' for d in detections)
     approach = any(d['class'] == 'vehicle' and d['zone'] == 'approach' for d in detections)
     ids = [d['id'] for d in detections]
     valid = usable and len(detections) <= 8 and all(type(i) is int and 0 < i <= 0xffffffff for i in ids) and len(set(ids)) == len(ids)
@@ -27,7 +30,7 @@ def observation(stream, sequence, captured_ms, detections, usable=True):
 
 
 class VisionService:
-    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=360, loop=False, clock=time.monotonic, frame_size=360, video_dir=None, selection_file=None, inference_threads=None):
+    def __init__(self, rt, zones, video=None, model=None, device='cpu', confidence=.30, imgsz=320, loop=False, clock=time.monotonic, frame_size=480, video_dir=None, selection_file=None, inference_threads=None):
         self.rt,self.zones,self.clock = rt,zones,clock
         self.video,self.model_path = Path(video) if video else None,Path(model) if model else None
         self.catalog=VideoCatalog(video_dir,selection_file)
@@ -42,16 +45,22 @@ class VisionService:
         self.current,self.received,self.frames = None,None,OrderedDict()
         self.serial,self.thread = 0,None
         self.applied_revision = zones.snapshot()['revision']
+        self.events = CrossingEvents()
+        self.identities = IdentityTracker()
 
     def reset_stream(self):
         old = self.stream
         while self.stream == old: self.stream = secrets.randbits(32)
         self.sequence = 0
+        self.events.reset_tracks(self.stream)
+        self.identities.reset()
 
     def unavailable(self):
         self.sequence = (self.sequence+1)&0xffffffff
         self.rt.publish(observation(self.stream,self.sequence,None,[],False))
         self.current,self.received = None,None
+        self.events.tracks.clear()
+        self.events.stopped = []
 
     def configure(self, data):
         with self.lock:
@@ -63,12 +72,24 @@ class VisionService:
     def select_video(self, data):
         with self.lock:
             self.video=self.catalog.select(data)
+        return self.restart()
+
+    def restart(self):
+        with self.lock:
+            if self.video is None: raise ValueError('Nessun replay selezionato')
             self.source_generation+=1
             self.reset_stream()
             self.unavailable()
             self.frames.clear()
             self.status,self.error='loading',None
-        if self.thread is None or not self.thread.is_alive(): self.start()
+        if self.thread is None or not self.thread.is_alive():
+            try:
+                self.start()
+            except ValueError as exc:
+                with self.lock:
+                    self.status,self.error = 'error',str(exc)
+                    self.unavailable()
+                raise
         return self.snapshot()
 
     def snapshot(self):
@@ -76,23 +97,31 @@ class VisionService:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
             return {**self.catalog.snapshot(self.video),'available':self.video is not None,'status':self.status,'error':self.error,
                     'source':self.video.name if self.video else None,'fresh':self.status == 'running' and age is not None and age < 750,
-                    'age_ms':age,'frame':copy.deepcopy(self.current),'zones':self.zones.snapshot()}
+                    'age_ms':age,'frame':copy.deepcopy(self.current),'zones':self.zones.snapshot(),
+                    'metrics':copy.deepcopy(self.events.snapshot()),'mode':'replay'}
 
     def image(self, serial):
         with self.lock: return self.frames.get(serial)
 
     def start(self):
-        if self.video is None: return
-        if not self.video.is_file(): raise ValueError(f'Video assente: {self.video}')
-        if self.model_path is None or not (self.model_path.is_file() or (self.model_path.is_dir() and all((self.model_path/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))):
-            raise ValueError(f'Modello locale assente: {self.model_path}')
-        self.status = 'loading'
-        self.thread = threading.Thread(target=self.run,name='yolo-video',daemon=True)
-        self.thread.start()
+        with self.lock:
+            if self.video is None or (self.thread is not None and self.thread.is_alive()): return
+            if not self.video.is_file(): raise ValueError(f'Video assente: {self.video}')
+            if self.model_path is None or not (self.model_path.is_file() or (self.model_path.is_dir() and all((self.model_path/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))):
+                raise ValueError(f'Modello locale assente: {self.model_path}')
+            self.status = 'loading'
+            self.thread = threading.Thread(target=self.run,name='yolo-video',daemon=True)
+            self.thread.start()
 
     def run(self):
         cap = None
         try:
+            # Runtime is offline; preparation/downloads belong to setup only.
+            os.environ['YOLO_OFFLINE'] = 'true'
+            os.environ['YOLO_AUTOINSTALL'] = 'false'
+            config_dir = Path(__file__).resolve().parents[1]/'.local'/'ultralytics'
+            config_dir.mkdir(parents=True,exist_ok=True)
+            os.environ.setdefault('YOLO_CONFIG_DIR',str(config_dir))
             import cv2
             if self.inference_threads is not None:
                 import torch
@@ -179,16 +208,24 @@ class VisionService:
                         zone = classify_position((x1+x2)/2,min(height-1,max(0,y2-1)),width,height,config['config'])
                         detections.append({'id':track_id,'class':kind,'label':label,'confidence':round(confidence,4),
                                            'bbox':[round(v,1) for v in box],'zone':zone})
-                        color = (80,220,120) if kind == 'pedestrian' else (255,180,70)
-                        scale = max(.55,width/1280)
-                        thickness = max(2,round(2*scale))
-                        text = f'{label} #{track_id or "?"} {confidence:.0%}'
-                        (text_width,text_height),baseline = cv2.getTextSize(text,cv2.FONT_HERSHEY_SIMPLEX,.65*scale,thickness)
-                        label_x = max(0,min(int(x1),width-text_width-8))
-                        label_y = max(text_height+8,int(y1)-8)
-                        cv2.rectangle(frame,(int(x1),int(y1)),(int(x2),int(y2)),color,thickness)
-                        cv2.rectangle(frame,(label_x,label_y-text_height-5),(label_x+text_width+6,label_y+baseline),(20,32,36),-1)
-                        cv2.putText(frame,text,(label_x+3,label_y),cv2.FONT_HERSHEY_SIMPLEX,.65*scale,color,thickness,cv2.LINE_AA)
+                with self.lock:
+                    if config['revision'] != self.zones.snapshot()['revision'] or generation != self.source_generation: continue
+                    detections=deduplicate_users(detections)
+                    self.identities.update(detections,(index-1)/fps,width,height)
+                for detection in detections:
+                    kind,label=detection['class'],detection['label']
+                    track_id,confidence=detection['id'],detection['confidence']
+                    x1,y1,x2,y2=detection['bbox']
+                    color = (80,220,120) if kind == 'pedestrian' else (255,180,70)
+                    scale = max(.55,width/1280)
+                    thickness = max(2,round(2*scale))
+                    text = f'{label} #{track_id or "?"} {confidence:.0%}'
+                    (text_width,text_height),baseline = cv2.getTextSize(text,cv2.FONT_HERSHEY_SIMPLEX,.65*scale,thickness)
+                    label_x = max(0,min(int(x1),width-text_width-8))
+                    label_y = max(text_height+8,int(y1)-8)
+                    cv2.rectangle(frame,(int(x1),int(y1)),(int(x2),int(y2)),color,thickness)
+                    cv2.rectangle(frame,(label_x,label_y-text_height-5),(label_x+text_width+6,label_y+baseline),(20,32,36),-1)
+                    cv2.putText(frame,text,(label_x+3,label_y),cv2.FONT_HERSHEY_SIMPLEX,.65*scale,color,thickness,cv2.LINE_AA)
                 # Limit web preview size; protocol observations always use the source frame.
                 if width > 1280: frame = cv2.resize(frame,(1280,round(height*1280/width)))
                 ok,jpeg = cv2.imencode('.jpg',frame,[cv2.IMWRITE_JPEG_QUALITY,80])
@@ -200,6 +237,11 @@ class VisionService:
                     obs = observation(self.stream,self.sequence,captured_ms,detections)
                     obs['age_ms'] = max(0,round(self.clock()*1000)-captured_ms)
                     self.rt.publish(obs)
+                    # Analytics owns each pedestrian trajectory. An untracked
+                    # vehicle can invalidate RT clear decisions without erasing
+                    # already observed pedestrian journeys; unknown IDs are
+                    # skipped and expire individually in CrossingEvents.
+                    self.events.update(self.stream,round((index-1)*1000/fps),detections,width,height)
                     self.serial += 1
                     completed.append(self.clock())
                     fps_actual = round((len(completed)-1)/(completed[-1]-completed[0]),1) if len(completed)>1 and completed[-1]>completed[0] else None

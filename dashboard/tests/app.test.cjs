@@ -8,11 +8,13 @@ function node(){return {textContent:'',value:'',hidden:false,disabled:false,styl
 async function run(defaultMode){
   const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id);};
   const requests=[node(),node()];requests[0].dataset={request:'pedestrian'};requests[1].dataset={request:'accessible'};
-  let trialStatus='completed',posts=0;
+  let trialStatus='completed',posts=0,requestId=null;
   const context={document:{getElementById:get,createElement:node,querySelectorAll:()=>requests},location:{host:'board.test:8081'},Date,console,setInterval(){},trafficSignals:{render(outputs){context.outputs=outputs;}},crypto:{randomUUID:()=> 'test-request'},fetch:async(path,options={})=>{
     let data;
     if(path==='/api/config')data={default_mode:defaultMode};
-    else if(path==='/api/trial'){
+    else if(path==='/api/requests'){
+      requestId=JSON.parse(options.body).request_id;data={status:'queued',requestId};
+    }else if(path==='/api/trial'){
       if(options.method==='POST'){posts++;trialStatus='running';data={status:'started'};}
       else data={available:true,status:trialStatus,error:null};
     }else if(path==='/api/rt')data={connected:true,age_ms:0,state:{phase:'PED_GREEN',vehicle_light:'RED',pedestrian_light:'GREEN',remaining_ms:4000,applied_frame:42,fault:null}};
@@ -24,6 +26,10 @@ async function run(defaultMode){
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(get('mode').value,defaultMode);
   if(defaultMode==='hardware'){
+    context.crypto={getRandomValues(values){values.set([0,1,2,0xffffffff]);return values;}};
+    await requests[0].handlers.click();
+    assert.equal(requestId,'000000000000000100000002ffffffff');
+    assert.match(get('request-status').textContent,/in coda/);
     assert.equal(context.outputs.vehicle,'red');assert.equal(context.outputs.pedestrian,'green');
     assert.equal(get('trial-start').hidden,false);assert.equal(get('trial-start').disabled,false);
     assert.match(get('trial-status').textContent,/completata/);

@@ -1,0 +1,204 @@
+{
+  "config": {
+    "default_mode": "hardware",
+    "controller": "bridge",
+    "source": "replay"
+  },
+  "reports": [
+    {
+      "video": "output_1.mp4",
+      "seconds": 81.02,
+      "observed_frames": 151,
+      "metrics": {
+        "completed": 2,
+        "left_to_right": 1,
+        "right_to_left": 1
+      },
+      "inference_median_ms": 174.0,
+      "inference_p95_ms": 193.0,
+      "rpc_median_ms": 161.7,
+      "rpc_p95_ms": 196.3,
+      "rpc_max_ms": 208.2,
+      "sent_age_p95_ms": 390,
+      "pipeline_fps_median": 5.2,
+      "connected_samples": 173,
+      "disconnected_samples": 0,
+      "fault_samples": {
+        "INVALID_DATA": 25
+      },
+      "transport_errors": {},
+      "phases": [
+        "ALL_RED_TO_PED",
+        "ALL_RED_TO_VEH",
+        "FAULT",
+        "PED_GREEN",
+        "PROTECTED_STOP",
+        "VEHICLE_GREEN",
+        "VEHICLE_YELLOW"
+      ],
+      "jpeg_verified": true
+    },
+    {
+      "video": "output_2.mp4",
+      "seconds": 74.03,
+      "observed_frames": 182,
+      "metrics": {
+        "completed": 0,
+        "left_to_right": 0,
+        "right_to_left": 0
+      },
+      "inference_median_ms": 170.1,
+      "inference_p95_ms": 185.8,
+      "rpc_median_ms": 163.8,
+      "rpc_p95_ms": 189.2,
+      "rpc_max_ms": 198.5,
+      "sent_age_p95_ms": 379,
+      "pipeline_fps_median": 5.4,
+      "connected_samples": 184,
+      "disconnected_samples": 0,
+      "fault_samples": {
+        "INVALID_DATA": 2
+      },
+      "transport_errors": {},
+      "phases": [
+        "ALL_RED_TO_PED",
+        "ALL_RED_TO_VEH",
+        "FAULT",
+        "PED_CLEARANCE",
+        "PED_GREEN",
+        "VEHICLE_GREEN",
+        "VEHICLE_YELLOW"
+      ],
+      "jpeg_verified": true
+    },
+    {
+      "video": "output_3.mp4",
+      "seconds": 54.53,
+      "observed_frames": 133,
+      "metrics": {
+        "completed": 1,
+        "left_to_right": 1,
+        "right_to_left": 0
+      },
+      "inference_median_ms": 163.4,
+      "inference_p95_ms": 173.8,
+      "rpc_median_ms": 159.3,
+      "rpc_p95_ms": 178.4,
+      "rpc_max_ms": 190.3,
+      "sent_age_p95_ms": 354,
+      "pipeline_fps_median": 5.6,
+      "connected_samples": 135,
+      "disconnected_samples": 0,
+      "fault_samples": {
+        "INVALID_DATA": 3
+      },
+      "transport_errors": {},
+      "phases": [
+        "ALL_RED_TO_PED",
+        "ALL_RED_TO_VEH",
+        "FAULT",
+        "PED_CLEARANCE",
+        "PED_GREEN",
+        "PROTECTED_STOP",
+        "VEHICLE_GREEN",
+        "VEHICLE_YELLOW"
+      ],
+      "jpeg_verified": true
+    },
+    {
+      "video": "output_4.mp4",
+      "seconds": 98.64,
+      "observed_frames": 228,
+      "metrics": {
+        "completed": 1,
+        "left_to_right": 0,
+        "right_to_left": 1
+      },
+      "inference_median_ms": 175.3,
+      "inference_p95_ms": 195.8,
+      "rpc_median_ms": 165.9,
+      "rpc_p95_ms": 195.4,
+      "rpc_max_ms": 202.1,
+      "sent_age_p95_ms": 391,
+      "pipeline_fps_median": 5.2,
+      "connected_samples": 229,
+      "disconnected_samples": 0,
+      "fault_samples": {
+        "INVALID_DATA": 2
+      },
+      "transport_errors": {},
+      "phases": [
+        "ALL_RED_TO_PED",
+        "ALL_RED_TO_VEH",
+        "FAULT",
+        "PED_CLEARANCE",
+        "PED_GREEN",
+        "PROTECTED_STOP",
+        "VEHICLE_GREEN",
+        "VEHICLE_YELLOW"
+      ],
+      "jpeg_verified": true
+    },
+    {
+      "video": "output_5.mp4",
+      "seconds": 82.03,
+      "observed_frames": 168,
+      "metrics": {
+        "completed": 0,
+        "left_to_right": 0,
+        "right_to_left": 0
+      },
+      "inference_median_ms": 179.1,
+      "inference_p95_ms": 190.7,
+      "rpc_median_ms": 169.2,
+      "rpc_p95_ms": 196.5,
+      "rpc_max_ms": 204.0,
+      "sent_age_p95_ms": 382,
+      "pipeline_fps_median": 5.2,
+      "connected_samples": 170,
+      "disconnected_samples": 0,
+      "fault_samples": {
+        "INVALID_DATA": 4
+      },
+      "transport_errors": {},
+      "phases": [
+        "ALL_RED_TO_PED",
+        "ALL_RED_TO_VEH",
+        "FAULT",
+        "PED_CLEARANCE",
+        "PED_GREEN",
+        "PROTECTED_STOP",
+        "VEHICLE_GREEN",
+        "VEHICLE_YELLOW"
+      ],
+      "jpeg_verified": true
+    },
+    {
+      "requests": [
+        {
+          "type": "accessible",
+          "status": "served",
+          "seconds": 9.94,
+          "remaining_ms": 7846
+        },
+        {
+          "type": "vehicle_priority",
+          "status": "served",
+          "seconds": 10.05,
+          "remaining_ms": null
+        },
+        {
+          "type": "pedestrian",
+          "status": "served",
+          "seconds": 8.27,
+          "remaining_ms": 4527
+        }
+      ]
+    }
+  ],
+  "failures": [
+    "output_1.mp4: left_to_right expected=2, actual=1",
+    "output_1.mp4: right_to_left expected=2, actual=1",
+    "output_4.mp4: left_to_right expected=2, actual=0"
+  ]
+}

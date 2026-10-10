@@ -20,7 +20,7 @@ struct Harness {
     input["stream"]=stream; input["frame"]=++sequence;
     input["time_ms"]=sequence; input["age_ms"]=0; input["valid"]=valid;
     input["crossing"]=valid?(clear?"clear":"occupied"):"unknown";
-    input["approach"]=valid?"clear":"unknown";
+    input["approach"]=valid?"present":"unknown";
     input["tracks"].to<JsonArray>();
     auto requests=input["requests"].to<JsonArray>();
     requests.add(request);requests.add(false);requests.add(false);
@@ -82,7 +82,8 @@ int main() {
   Harness timeout;timeout.pedestrian();
   timeout.sample(24500,false);timeout.expect("PROTECTED_STOP");
   assert(timeout.response["alarms"][0]=="CLEARANCE_TIMEOUT");
-  timeout.sample(25000);timeout.sample(26000);timeout.expect("PROTECTED_STOP");
+  timeout.sample(25000);timeout.sample(25500);timeout.expect("ALL_RED_TO_VEH");
+  timeout.sample(26000);timeout.expect("ALL_RED_TO_VEH");
   ++timeout.stream;timeout.sample(26010);timeout.expect("FAULT"); // New session rearms through clear recovery.
   timeout.sample(26510);timeout.expect("ALL_RED_TO_VEH");
 

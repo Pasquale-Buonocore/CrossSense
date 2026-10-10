@@ -17,7 +17,7 @@ int main() {
     JsonDocument input;
     input["stream"]=1;input["frame"]=now/100+1;
     input["time_ms"]=now;input["age_ms"]=0;input["valid"]=true;
-    input["crossing"]="clear";input["approach"]="clear";
+    input["crossing"]="clear";input["approach"]="present";
     input["tracks"].to<JsonArray>();auto req=input["requests"].to<JsonArray>();
     req.add(now==1600);req.add(false);req.add(false);
     String payload;serializeJson(input,payload);
