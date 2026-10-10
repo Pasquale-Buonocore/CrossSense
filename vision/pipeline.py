@@ -11,7 +11,7 @@ from .sources import VideoCatalog
 from .events import CrossingEvents
 from .identity import IdentityTracker, deduplicate_users
 
-CLASSES = {0:('pedestrian','PEDONE'),1:('bicycle','BICICLETTA'),2:('vehicle','AUTO'),3:('vehicle','MOTO'),5:('vehicle','AUTOBUS'),7:('vehicle','CAMION')}
+CLASSES = {0:('pedestrian','PEDONE'),2:('vehicle','AUTO'),7:('vehicle','AMBULANZA')}
 
 
 def observation(stream, sequence, captured_ms, detections, usable=True):
@@ -95,7 +95,7 @@ class VisionService:
     def snapshot(self):
         with self.lock:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
-            return {**self.catalog.snapshot(self.video),'available':self.video is not None,'status':self.status,'error':self.error,
+            return {**self.catalog.snapshot(self.video),'available':self.video is not None,'status':self.status,'error':self.error,'confidence':self.confidence,
                     'source':self.video.name if self.video else None,'fresh':self.status == 'running' and age is not None and age < 750,
                     'age_ms':age,'frame':copy.deepcopy(self.current),'zones':self.zones.snapshot(),
                     'metrics':copy.deepcopy(self.events.snapshot()),'mode':'replay'}
