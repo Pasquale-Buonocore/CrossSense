@@ -1,0 +1,5 @@
+name: CrossSense Linux LED Counter
+description: Comandi LED da Linux e contatore dei cambiamenti restituito dalla STM32
+icon: 💡
+ports: []
+bricks: []
