@@ -1,0 +1,136 @@
+{
+  "date": "2026-10-11",
+  "target": "Arduino UNO Q",
+  "app": "crosssense-launch-app-lab",
+  "video": "SCENA_UNITA.mp4",
+  "duration_seconds_per_run": 40,
+  "method": "Replay restarted for each run; concurrent vision/RT GETs and sequential JPEG GET, target 200 ms cadence. Polls use urllib (new connections); browser also open in cap_only and final runs. Not a controlled network benchmark. Video paused after each run.",
+  "runs": {
+    "before": {
+      "samples": 104,
+      "errors": 1,
+      "stale_running": 0,
+      "disconnected": 0,
+      "fps": {
+        "median": 5.7,
+        "p95": 6.0,
+        "max": 6.2
+      },
+      "inference": {
+        "median": 162.35000000000002,
+        "p95": 170.7,
+        "max": 176.1
+      },
+      "age": {
+        "median": 327.0,
+        "p95": 339,
+        "max": 351
+      },
+      "http_ms": {
+        "median": 139.7,
+        "p95": 297.3,
+        "max": 863.0
+      },
+      "rpc": {
+        "median": 157.2,
+        "p95": 178.2,
+        "max": 186.1
+      },
+      "sent_age": {
+        "median": 322.0,
+        "p95": 352,
+        "max": 355
+      }
+    },
+    "cap_only_with_browser": {
+      "samples": 17,
+      "errors": 8,
+      "stale_running": 0,
+      "disconnected": 0,
+      "fps": {
+        "median": 5.0,
+        "p95": 5.0,
+        "max": 5.0
+      },
+      "inference": {
+        "median": 157.8,
+        "p95": 160.8,
+        "max": 162.2
+      },
+      "age": {
+        "median": 360,
+        "p95": 375,
+        "max": 391
+      },
+      "http_ms": {
+        "median": 218.1,
+        "p95": 682.8,
+        "max": 1972.5
+      },
+      "rpc": {
+        "median": 185.7,
+        "p95": 188.9,
+        "max": 202.6
+      },
+      "sent_age": {
+        "median": 370.5,
+        "p95": 373,
+        "max": 373
+      }
+    },
+    "final_with_browser": {
+      "samples": 106,
+      "errors": 0,
+      "stale_running": 0,
+      "disconnected": 0,
+      "fps": {
+        "median": 5.0,
+        "p95": 5.0,
+        "max": 5.0
+      },
+      "inference": {
+        "median": 164.3,
+        "p95": 174.7,
+        "max": 190.5
+      },
+      "age": {
+        "median": 360,
+        "p95": 384,
+        "max": 402
+      },
+      "http_ms": {
+        "median": 158.14999999999998,
+        "p95": 293.4,
+        "max": 495.4
+      },
+      "rpc": {
+        "median": 184.10000000000002,
+        "p95": 199.9,
+        "max": 205.5
+      },
+      "sent_age": {
+        "median": 359.0,
+        "p95": 384,
+        "max": 394
+      }
+    }
+  },
+  "deployed_sha256": {
+    "vision/pipeline.py": "24f5967b6be55d6427cb392879f51488425903d716b6338122a8292631431e5c",
+    "dashboard/static/vision.js": "3c4b65799c872a3d3d74256de7fb51e0b880c2bf7858b3bce49772dfb1e81fb2",
+    "dashboard/server.py": "50d64a3095dba3b5f96c1737e4dc6814c7ab6d126482d7d8ba065c3ffbe89d9b"
+  },
+  "validation": {
+    "vision_python_tests": 30,
+    "dashboard_python_tests": 36,
+    "scripts_python_tests": 12,
+    "javascript_suites": [
+      "app",
+      "providers",
+      "vision",
+      "replay"
+    ],
+    "all_passed": true
+  },
+  "limits": "Short replay test; camera and prolonged Wi-Fi outages not measured. MCU watchdog and 750 ms observation freshness threshold unchanged."
+}

@@ -13,6 +13,7 @@ from .events import CrossingEvents
 from .identity import IdentityTracker, deduplicate_users
 
 CLASSES = {0:('pedestrian','PEDONE'),2:('vehicle','AUTO'),7:('vehicle','AMBULANZA')}
+MAX_FPS = 5
 
 
 def observation(stream, sequence, captured_ms, detections, usable=True):
@@ -213,7 +214,7 @@ class VisionService:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
             return {**self.catalog.snapshot(self.video),'available':self.video is not None if self.mode == 'replay' else self.camera_enabled,
                     'camera_available':self.camera_enabled,'camera_calibrated':self.camera_calibrated,
-                    'status':self.status,'error':self.error,'confidence':self.confidence,
+                    'status':self.status,'error':self.error,'confidence':self.confidence,'max_fps':MAX_FPS,
                     'model_status':self.model_status,'model_error':self.model_error,'model_load_ms':self.model_load_ms,
                     'source':self.video.name if self.mode == 'replay' and self.video else 'CAM0' if self.mode == 'camera' else None,
                     'fresh':self.status == 'running' and age is not None and age < 750,
@@ -258,6 +259,7 @@ class VisionService:
             inference_size = max(stride,(self.imgsz//stride)*stride)
             generation,previous_ms=-1,-1
             completed = deque(maxlen=30)
+            last_published = None
             threads_configured = self.model is not None
             while not self.stop.is_set():
                 with self.lock:
@@ -280,7 +282,7 @@ class VisionService:
                     if mode == 'camera':
                         camera_capture=CameraCapture(clock=self.clock)
                         camera_capture.start()
-                        fps=5
+                        fps=MAX_FPS
                     else:
                         cap=cv2.VideoCapture(str(video))
                         if not cap.isOpened(): raise ValueError('Impossibile aprire il video')
@@ -391,6 +393,11 @@ class VisionService:
                 if width > 1280: frame = cv2.resize(frame,(1280,round(height*1280/width)))
                 ok,jpeg = cv2.imencode('.jpg',frame,[cv2.IMWRITE_JPEG_QUALITY,80])
                 if not ok: raise ValueError('Codifica preview non riuscita')
+                # Space publications too: a fast inference after a slow one must
+                # not produce a catch-up burst. Wait outside the snapshot lock.
+                interval = 1/min(fps,MAX_FPS)
+                if last_published is not None:
+                    if self.stop.wait(max(0,last_published+interval-self.clock())): break
                 with self.lock:
                     # Drop a result that was inferred against polygons replaced mid-inference.
                     if config['revision'] != self.zones.snapshot()['revision'] or generation != self.source_generation: continue
@@ -409,6 +416,7 @@ class VisionService:
                     if calibrated: self.events.update(self.stream,source_ms,detections,width,height)
                     self.serial += 1
                     completed.append(self.clock())
+                    last_published = completed[-1]
                     fps_actual = round((len(completed)-1)/(completed[-1]-completed[0]),1) if len(completed)>1 and completed[-1]>completed[0] else None
                     self.frames[self.serial] = jpeg.tobytes()
                     while len(self.frames) > 4: self.frames.popitem(last=False)
@@ -417,7 +425,7 @@ class VisionService:
                                     'inference_ms':inference_ms,'fps':fps_actual,'inference_size':inference_size,'observation':obs,'detections':detections,'zones_revision':config['revision']}
                     self.received,self.error = captured_ms/1000,None
                     if self.status != 'paused': self.status='running'
-                if mode == 'replay': self.stop.wait(max(0,1/fps-(self.clock()-began)))
+                self.stop.wait(max(0,interval-(self.clock()-began)))
         except Exception as exc:
             with self.lock:
                 self.status,self.error = 'error',str(exc)

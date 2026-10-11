@@ -29,17 +29,18 @@ class VisionView {
     this.refresh();setInterval(()=>this.refresh(),200);
   }
   async refresh(){
-    if(this.polling)return;this.polling=true;
+    if(this.polling){this.render(this.mode);return;}this.polling=true;
     const sourceToken=this.sourceToken;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),750);
     try{
-      const response=await fetch('/api/vision',{cache:'no-store'});if(!response.ok)throw Error('Visione non disponibile');
+      const response=await fetch('/api/vision',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('Visione non disponibile');
       const data=await response.json();if(sourceToken!==this.sourceToken)return;this.data=data;this.receivedAt=Date.now();
       this.render(this.mode);
       if(!this.imageLoading&&!this.editing&&this.mode===data.mode&&data.frame&&data.frame.serial!==this.serial){
         this.loadPreview(data.frame.serial,sourceToken);
       }
     }catch{if(sourceToken===this.sourceToken)this.render(this.mode);}
-    finally{this.polling=false;}
+    finally{clearTimeout(timeout);this.polling=false;}
   }
   async loadPreview(serial,sourceToken){
     this.imageLoading=true;let url=null;
@@ -82,7 +83,10 @@ class VisionView {
     if(!this.editing)this.note.textContent=data?.zones?`Zone ${mode==='camera'?'telecamera':'replay'} · modifica i poligoni direttamente sul frame.`:'Caricamento delle zone…';
     if(mode==='replay'||mode==='camera'){
       const fresh=data?.fresh&&data.frame&&(data.age_ms+(Date.now()-this.receivedAt)<750),frame=data?.frame;
-      const statusText={idle:'Seleziona un video',ready:mode==='camera'?'Pronto · premi Avvia':'Pronto · premi Riproduci',loading:mode==='camera'?'Avvio telecamera…':'Avvio video…',paused:'Video in pausa',completed:'Video terminato',error:'Errore visione',stopped:'Sorgente fermata'}[data?.status]||'Osservazioni obsolete';
+      // An expired browser cache is not evidence that inference stopped.
+      // Keep expired observations unusable, but distinguish transport delay
+      // from a stale acquisition explicitly reported by the server.
+      const statusText={idle:'Seleziona un video',ready:mode==='camera'?'Pronto · premi Avvia':'Pronto · premi Riproduci',loading:mode==='camera'?'Avvio telecamera…':'Avvio video…',paused:'Video in pausa',completed:'Video terminato',error:'Errore visione',stopped:'Sorgente fermata'}[data?.status]||(data?.fresh?'Aggiornamento osservazioni…':'Osservazioni obsolete');
       const modelLabel=data?.model_status==='loading'?'Preparazione YOLO…':data?.model_status==='error'?'Errore modello':data?.model_status==='ready'?(data.model_load_ms?`YOLO pronto · ${(data.model_load_ms/1000).toFixed(1)} s`:'YOLO pronto'):'Preparazione modello…';
       document.getElementById('vision-badge').textContent=fresh?'● YOLO':data?.model_status==='error'?'Errore modello':statusText;
       document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza · ${fresh?(frame?.fps??'—'):'—'} fotogrammi/s`:`Seleziona un video e premi Riproduci · ${modelLabel}`;

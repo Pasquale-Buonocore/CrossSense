@@ -8,7 +8,7 @@ const get=id=>{if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);};
 let now=0,serial=1,calls=0,jpegCalls=0,failMetadata=false;
 const revoked=[];
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-const context={document:{getElementById:get,createElement:node},Date:{now:()=>now},Image:class {constructor(){images.push(this);}},URL:{createObjectURL:()=>`blob:${jpegCalls}`,revokeObjectURL:url=>revoked.push(url)},fetch:async(path)=>{
+const context={AbortController,setTimeout,clearTimeout,document:{getElementById:get,createElement:node},Date:{now:()=>now},Image:class {constructor(){images.push(this);}},URL:{createObjectURL:()=>`blob:${jpegCalls}`,revokeObjectURL:url=>revoked.push(url)},fetch:async(path)=>{
   if(path.startsWith("/api/vision/frame.jpg")){jpegCalls++;return {ok:true,blob:async()=>({})};}
   if(failMetadata)throw Error("network hiccup");
   calls++;
@@ -34,9 +34,19 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  failMetadata=true;await view.refresh();
  assert.equal(get("vision-badge").textContent,"● YOLO","one failed fetch retains still-fresh metadata");
  now=700;await view.refresh();
- assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','actual stale observations must still be visible');
+ assert.equal(get('vision-badge').textContent,'Aggiornamento osservazioni…','expired browser metadata is a transport delay');
+ assert.equal(get('occupied').textContent,'Sconosciuto','expired observations remain unusable');
+ view.data.fresh=false;view.render('replay');
+ assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server-reported stale acquisitions must still be visible');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  failMetadata=false;
+ const transport=context.fetch;
+ context.fetch=(_path,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('timeout'))));
+ const stalled=view.refresh();
+ await view.refresh();assert.equal(view.polling,true);
+ await stalled;assert.equal(view.polling,false,'timed-out metadata request releases polling');
+ context.fetch=transport;
+ await view.refresh();assert.equal(get('vision-badge').textContent,'● YOLO','polling recovers after a hung request');
  view.data={available:true,mode:'replay',status:'completed',model_status:'ready',fresh:false,source:'video.mp4',selected_video:'video.mp4',videos:[{id:'video.mp4',label:'Video'}],frame:null};
  view.receivedAt=now;view.render('replay');
  assert.equal(view.emptyState.hidden,false,'completed video must show the end-state overlay');
