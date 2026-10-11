@@ -46,6 +46,13 @@ function showMode(){
   $('video-controls').hidden=mode==='camera';$('camera-controls').hidden=mode!=='camera';
   update();
 }
+function syncVisionMode(data){
+  if(modeChanging||!['replay','camera'].includes(data?.mode)||mode===data.mode)return;
+  mode=data.mode;
+  if(globalThis.visionView){globalThis.visionView.sourceToken++;globalThis.visionView.serial=null;}
+  showMode();
+}
+globalThis.syncVisionMode=syncVisionMode;
 async function setMode(value){
   if(modeChanging||!['replay','camera'].includes(value))return;
   modeChanging=true;$('mode').disabled=true;
@@ -76,7 +83,10 @@ $('export').addEventListener('click',()=>{
 });
 async function initialize(){
   try{const response=await fetch('/api/config',{cache:'no-store'});if(response.ok){const config=await response.json();if(globalThis.replayDashboard)globalThis.replayDashboard.controller=config.controller;$('mode-camera').disabled=!config.camera_available;}}catch{}
-  await setMode('replay');await provider.tick();update();
+  // Opening a second dashboard observes the shared source; only an explicit
+  // selection may change it for everyone.
+  try{const response=await fetch('/api/vision',{cache:'no-store'});if(response.ok){const data=await response.json();if(globalThis.visionView){globalThis.visionView.data=data;globalThis.visionView.receivedAt=Date.now();}syncVisionMode(data);}}catch{}
+  showMode();await provider.tick();update();
   setInterval(async()=>{const active=provider;await active.tick();if(active===provider)update();},200);
 }
 initialize();

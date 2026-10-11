@@ -34,8 +34,14 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  failMetadata=true;await view.refresh();
  assert.equal(get("vision-badge").textContent,"● YOLO","one failed fetch retains still-fresh metadata");
  now=700;await view.refresh();
- assert.equal(get('vision-badge').textContent,'Aggiornamento osservazioni…','expired browser metadata is a transport delay');
- assert.equal(get('occupied').textContent,'Sconosciuto','expired observations remain unusable');
+ assert.equal(get('vision-badge').textContent,'● YOLO','a short transport gap must not toggle the source activity badge');
+ assert.equal(get('occupied').textContent,'Sconosciuto','expired observations remain unusable during badge grace');
+ view.data.fresh=false;view.render('replay');
+ assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server staleness bypasses transport grace immediately');
+ view.data.fresh=true;
+ now=2400;view.render('replay');
+ assert.equal(get('vision-badge').textContent,'Aggiornamento osservazioni…','a prolonged metadata gap must still be visible');
+ assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  view.data.fresh=false;view.render('replay');
  assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server-reported stale acquisitions must still be visible');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
