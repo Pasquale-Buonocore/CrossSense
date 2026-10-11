@@ -35,12 +35,21 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  assert.equal(get("vision-badge").textContent,"● YOLO","one failed fetch retains still-fresh metadata");
  now=700;await view.refresh();
  assert.equal(get('vision-badge').textContent,'● YOLO','a short transport gap must not toggle the source activity badge');
- assert.equal(get('occupied').textContent,'Sconosciuto','expired observations remain unusable during badge grace');
+ for(const [crossing,label] of [['clear','Libero'],['occupied','Occupato']]){
+  view.data.frame.observation.crossing=crossing;view.render('replay');
+  assert.equal(get('occupied').textContent,label,'a brief web gap preserves the last server-confirmed crossing state');
+  assert.match(get('occupancy-detail').textContent,/Ultimo dato ricevuto/,'the retained state must be identified as historical');
+ }
+ view.data.frame.observation={valid:false,crossing:'unknown'};view.render('replay');
+ assert.equal(get('occupied').textContent,'Sconosciuto','new invalid tracking is not covered by display grace');
+ view.data.frame.observation={valid:true,crossing:'clear'};
  view.data.fresh=false;view.render('replay');
  assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server staleness bypasses transport grace immediately');
+ assert.equal(get('occupied').textContent,'Sconosciuto','server staleness invalidates the displayed crossing immediately');
  view.data.fresh=true;
  now=2400;view.render('replay');
  assert.equal(get('vision-badge').textContent,'Aggiornamento osservazioni…','a prolonged metadata gap must still be visible');
+ assert.equal(get('occupied').textContent,'Sconosciuto','the retained crossing expires after a prolonged web gap');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  view.data.fresh=false;view.render('replay');
  assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server-reported stale acquisitions must still be visible');

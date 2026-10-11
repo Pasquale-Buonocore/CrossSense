@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-11",
+  "reported_symptom": "Crossing state intermittently switches between Occupato/Libero and Sconosciuto on multiple clients.",
+  "local_observation_probe": {
+    "duration_seconds": 20,
+    "samples": 198,
+    "mode": "replay",
+    "status": "running",
+    "stale_frames": 0,
+    "invalid_observations": 0
+  },
+  "changes": [
+    "Vision owns occupancy fields; controller rendering no longer resets them to unknown on each telemetry poll.",
+    "A brief web gap retains the last server-confirmed crossing and waiting counts for up to 2 seconds since metadata reception.",
+    "A browser observation older than 750 ms is explicitly labeled Ultimo dato ricevuto with delayed update.",
+    "Server-reported stale observations, invalid tracking and prolonged web gaps bypass retention.",
+    "MCU protocol and watchdog remain unchanged."
+  ],
+  "validation": {
+    "javascript_suites": ["vision", "app", "providers", "replay"],
+    "passed": true,
+    "regressions": [
+      "Both clear and occupied states are retained and labeled during a brief web gap.",
+      "Server-reported staleness immediately makes occupancy unknown.",
+      "Invalid unknown tracking does not reuse a previous valid crossing state.",
+      "A prolonged web gap makes occupancy unknown.",
+      "Controller rendering does not reset crossing or vision/analytics counts."
+    ]
+  },
+  "deployment": {
+    "app": "crosssense-launch-app-lab",
+    "restart_required": false,
+    "clients_must_reload": true
+  },
+  "limit": "The trace observed a short replay segment. Group-client behavior must still be checked after all clients reload."
+}

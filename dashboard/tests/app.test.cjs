@@ -38,5 +38,11 @@ runInNewContext(providers+'\n'+source.replace('initialize();','globalThis.ready=
   assert.equal(selected,'camera');assert.equal(get('camera-controls').hidden,false);
   assert.equal(get('video-controls').hidden,true);
   assert.equal(get('mode-label').textContent,'TELECAMERA');
+  context.visionView={render(){}};context.replayDashboard={render(){}};
+  get('occupied').textContent='Libero';get('waiting').textContent='2';get('count').textContent='7';
+  context.update();
+  assert.equal(get('occupied').textContent,'Libero','controller rendering must not overwrite the vision-owned crossing');
+  assert.equal(get('waiting').textContent,'2','controller rendering must not reset vision counts');
+  assert.equal(get('count').textContent,'7','controller rendering must not reset analytics counts');
   console.log('APP_OK: new viewers preserve the shared source, remote changes synchronize, explicit selection sends commands.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

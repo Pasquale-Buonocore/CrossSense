@@ -26,11 +26,17 @@ function render(snapshot){
   $('progress').style.width='0%';
   $('ped-signal').textContent=offline?'—':controllerText.lights[snapshot.outputs.pedestrian]||'Sconosciuto';
   $('protection').textContent=offline?'—':['PED_CLEARANCE','PROTECTED_STOP','FAULT'].includes(snapshot.rt.phase)?'Attiva':'Inattiva';
-  $('occupied').textContent='Sconosciuto';$('occupancy-detail').textContent='In attesa di osservazioni YOLO';
-  $('waiting').textContent='—';$('wait-detail').textContent='Conteggi non disponibili';
-  $('count').textContent='—';$('avg').textContent='—';$('ltr').textContent='—';$('rtl').textContent='—';
-  ['ltr','rtl'].forEach(id=>$(id+'-bar').style.width='0%');
-  $('vision-badge').textContent=offline?'DISCONNESSO':'● TEMPO REALE';
+  // Vision and analytics own their fields. A telemetry poll must not reset
+  // them to unknown/empty before the owning view renders the same values.
+  if(!globalThis.visionView){
+    $('occupied').textContent='Sconosciuto';$('occupancy-detail').textContent='In attesa di osservazioni YOLO';
+    $('waiting').textContent='—';$('wait-detail').textContent='Conteggi non disponibili';
+    $('vision-badge').textContent=offline?'DISCONNESSO':'● TEMPO REALE';
+  }
+  if(!globalThis.replayDashboard){
+    $('count').textContent='—';$('avg').textContent='—';$('ltr').textContent='—';$('rtl').textContent='—';
+    ['ltr','rtl'].forEach(id=>$(id+'-bar').style.width='0%');
+  }
   $('controller-description').textContent=offline?'Telemetria MCU · non disponibile':unstable?'Telemetria MCU · connessione instabile':'Telemetria MCU · Bridge v1';
   trafficSignals.render(snapshot.outputs);
   document.querySelectorAll('[data-request]').forEach(b=>b.disabled=offline||unstable||modeChanging||!!globalThis.visionView?.changingVideo||!!globalThis.visionView?.saving);
