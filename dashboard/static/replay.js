@@ -18,14 +18,15 @@ globalThis.replayDashboard = {
       }
     }
     for(const entry of rt?.events||[]){
-      if(entry.id>this.rtEvent){event(entry.message,entry.type==='ALARM');this.rtEvent=entry.id;}
+      if(entry.id>this.rtEvent){event(globalThis.controllerText?.code(entry.message)||entry.message,entry.type==='ALARM');this.rtEvent=entry.id;}
     }
     const stopped=data?.fresh&&data.age_ms+(Date.now()-(globalThis.visionView?.receivedAt||0))<750?metrics?.stopped_ids||[]:[];
     const alarms=snapshot.rt?.alarms||[];
-    const label=alarms.concat(stopped.length?['IMMOBILITÀ NEL REPLAY']:[]);
+    const label=alarms.map(value=>globalThis.controllerText?.code(value)||value).concat(stopped.length?['IMMOBILITÀ NEL VIDEO']:[]);
     $('alarm-status').textContent=snapshot.scenario==='offline'?'Controller non disponibile':label.length?label.join(' · '):'Nessun allarme attivo';
     $('alarm-status').classList.toggle('active-alarm',label.length>0);
-    $('transport-status').textContent=rt?`${this.controller==='native'?'Firmware nativo su PC':'MCU via Bridge'} · RPC ${rt.rpc_ms??'—'} ms · ${rt.error||snapshot.rt?.error||snapshot.rt?.fault||'OK'}`:'In attesa del servizio';
+    const transportCode=rt?.error||snapshot.rt?.error||snapshot.rt?.fault||'OK';
+    $('transport-status').textContent=rt?`${this.controller==='native'?'Firmware nativo su PC':'MCU via Bridge'} · RPC ${rt.rpc_ms??'—'} ms · ${globalThis.controllerText?.code(transportCode)||transportCode}`:'In attesa del servizio';
     const request=(rt?.requests||[]).find(r=>r.requestId===this.requestId);
     if(request){
       const labels={queued:'In coda: attende una nuova immagine',accepted:'Ricevuta dal controller',applied:'Applicata: in attesa della fase',served:'Richiesta servita',cancelled:'Richiesta annullata'};

@@ -81,6 +81,18 @@ class Handler(SimpleHTTPRequestHandler):
             elif self.path == '/api/vision/source':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 self.reply(vision.select_video(data))
+            elif self.path == '/api/vision/play':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                if data != {}: raise ValueError('Play richiede un oggetto JSON vuoto')
+                self.reply(vision.play())
+            elif self.path == '/api/vision/pause':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                if data != {}: raise ValueError('Pausa richiede un oggetto JSON vuoto')
+                self.reply(vision.pause())
+            elif self.path == '/api/vision/stop':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                if data != {}: raise ValueError('Stop richiede un oggetto JSON vuoto')
+                self.reply(vision.stop_playback())
             elif self.path == '/api/vision/restart':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 if data != {}: raise ValueError('Il riavvio richiede un oggetto JSON vuoto')
@@ -148,19 +160,16 @@ def main(on_ready=None):
         server.vision = vision
         server.controller_kind = 'native' if args.native_controller else 'bridge' if args.bridge else 'none'
         rt.start()
+        vision.preload()
         print(f'CrossSense: http://{args.host}:{args.port}',flush=True)
         try:
-            try:
-                vision.start()
-            except ValueError as exc:
-                vision.status, vision.error = 'error', str(exc)
-                vision.unavailable()
             if on_ready is not None: on_ready(server)
             server.serve_forever()
         finally:
             vision.stop.set()
             rt.stop.set()
             if vision.thread: vision.thread.join(timeout=2)
+            if vision.model_thread: vision.model_thread.join(timeout=2)
             if rt.thread: rt.thread.join(timeout=1)
             if args.native_controller or args.bridge: call.close()
 

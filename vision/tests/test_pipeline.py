@@ -69,6 +69,23 @@ class Tensor:
 
 
 class VideoTests(unittest.TestCase):
+    def test_model_is_preloaded_and_warmed_without_starting_a_video(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder);model_path=path/'model.pt';model_path.touch()
+            resets=[];calls=[]
+            predictor=SimpleNamespace(trackers=[SimpleNamespace(reset=lambda:resets.append(1))],model=SimpleNamespace(backend=None))
+            model=SimpleNamespace(model=SimpleNamespace(stride=[32]),predictor=predictor,
+                                  track=lambda frame,**kwargs:calls.append((frame,kwargs)) or [SimpleNamespace(boxes=None)])
+            cv=SimpleNamespace(setNumThreads=lambda value:None)
+            np=SimpleNamespace(uint8='uint8',zeros=lambda shape,dtype:SimpleNamespace(shape=shape,dtype=dtype))
+            torch=SimpleNamespace(set_num_threads=lambda value:None)
+            vision=VisionService(RTService(),ZoneStore(path/'zones.json'),model=model_path,imgsz=320,inference_threads=2)
+            with patch.dict(sys.modules,{'cv2':cv,'numpy':np,'torch':torch,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):
+                vision.preload();vision.model_thread.join(timeout=2)
+            snapshot=vision.snapshot()
+            self.assertEqual(snapshot['model_status'],'ready');self.assertIsNone(vision.video)
+            self.assertEqual(snapshot['status'],'idle');self.assertEqual(len(calls),1);self.assertEqual(len(resets),1)
+
     def test_every_frame_processed_eof_invalidates_preview_and_bridge(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder);(path/'video.mp4').touch();(path/'model.pt').touch()
@@ -98,6 +115,7 @@ class VideoTests(unittest.TestCase):
                 resize=lambda f,size:SimpleNamespace(shape=(size[1],size[0],3)),imencode=lambda *a:(True,SimpleNamespace(tobytes=lambda:b'jpeg')),
                 IMWRITE_JPEG_QUALITY=1)
             vision=VisionService(RecordingRT(),ZoneStore(path/'zones.json'),path/'video.mp4',path/'model.pt',frame_size=480,imgsz=320)
+            vision.status='loading'
             with patch.dict(sys.modules,{'cv2':cv,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):vision.run()
             self.assertEqual(len(calls),3);self.assertTrue(all(c['persist'] and c['tracker']=='bytetrack.yaml' for c in calls))
             self.assertTrue(all(c['imgsz']==320 for c in calls))

@@ -17,6 +17,7 @@ def main():
             headers={'Content-Type':'application/json'})
         with urllib.request.urlopen(request,timeout=5) as response:return json.load(response)
     call('/api/vision/source',{'video':'output_2.mp4'})
+    call('/api/vision/play',{})
     began=time.monotonic();first=None;wire=None;seen=set();report={}
     while time.monotonic()-began<150:
         vision,rt=call('/api/vision'),call('/api/rt')

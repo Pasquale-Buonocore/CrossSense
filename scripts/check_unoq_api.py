@@ -40,10 +40,13 @@ def main():
         assert call('/api/vision/zones',zones)[0]==409
         assert call('/api/vision/zones')[1]==saved
         passed('roi_save_revision_conflict_and_readback')
-        assert call('/api/vision/restart',{'unexpected':True})[0]==400
-        assert call('/api/vision/restart',{})[0]==200
-        passed('replay_restart_contract')
         assert call('/api/vision/source',{'video':'output_2.mp4'})[0]==200
+        assert call('/api/vision/play',{'unexpected':True})[0]==400
+        assert call('/api/vision/play',{})[0]==200
+        assert call('/api/vision/pause',{})[0]==200
+        assert call('/api/vision/play',{})[0]==200
+        assert call('/api/vision/restart',{})[0]==200
+        passed('manual_replay_controls_contract')
         wait(lambda r:r['connected'] and r['state']['observation_valid'] and r['state']['phase']=='VEHICLE_GREEN')
         key='api-'+uuid.uuid4().hex;began=time.monotonic()
         while True:

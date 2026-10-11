@@ -44,6 +44,11 @@ class VisionService:
         self.status,self.error = 'idle',None
         self.current,self.received,self.frames = None,None,OrderedDict()
         self.serial,self.thread = 0,None
+        self.model=None
+        self.model_status='idle'
+        self.model_error=None
+        self.model_load_ms=None
+        self.model_thread=None
         self.applied_revision = zones.snapshot()['revision']
         self.events = CrossingEvents()
         self.identities = IdentityTracker()
@@ -73,30 +78,114 @@ class VisionService:
     def select_video(self, data):
         with self.lock:
             self.video=self.catalog.select(data)
-        return self.restart()
-
-    def restart(self):
-        with self.lock:
-            if self.video is None: raise ValueError('Nessun replay selezionato')
             self.source_generation+=1
             self.reset_stream()
             self.unavailable()
             self.frames.clear()
-            self.status,self.error='loading',None
-        if self.thread is None or not self.thread.is_alive():
-            try:
-                self.start()
-            except ValueError as exc:
-                with self.lock:
-                    self.status,self.error = 'error',str(exc)
-                    self.unavailable()
-                raise
+            self.status,self.error='ready',None
         return self.snapshot()
+
+    def preload(self):
+        with self.lock:
+            if self.model_status in ('loading','ready'):
+                return
+            if self.model_path is None or not (self.model_path.is_file() or (self.model_path.is_dir() and all((self.model_path/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))):
+                self.model_status='error'
+                self.model_error=f'Modello locale assente: {self.model_path}'
+                return
+            self.model_status='loading'
+            self.model_error=None
+            began=self.clock()
+        def load():
+            try:
+                os.environ['YOLO_OFFLINE']='true'
+                os.environ['YOLO_AUTOINSTALL']='false'
+                config_dir=Path(__file__).resolve().parents[1]/'.local'/'ultralytics'
+                config_dir.mkdir(parents=True,exist_ok=True)
+                os.environ.setdefault('YOLO_CONFIG_DIR',str(config_dir))
+                import cv2
+                import numpy as np
+                if self.inference_threads is not None:
+                    import torch
+                    torch.set_num_threads(1)
+                    cv2.setNumThreads(1)
+                from ultralytics import YOLO
+                model=YOLO(str(self.model_path))
+                stride=max(int(v) for v in getattr(getattr(model,'model',None),'stride',[32]))
+                inference_size=max(stride,(self.imgsz//stride)*stride)
+                dummy=np.zeros((inference_size,inference_size,3),dtype=np.uint8)
+                options=dict(persist=False,tracker='bytetrack.yaml',classes=list(CLASSES),conf=self.confidence,
+                             device=self.device,imgsz=inference_size,iou=.50,max_det=500,verbose=False)
+                # The first call creates the Ultralytics predictor and NCNN backend.
+                model.track(dummy,**options)
+                backend=getattr(getattr(model.predictor,'model',None),'backend',None)
+                net=getattr(backend,'net',None)
+                if net is not None and self.inference_threads is not None:
+                    # NCNN packs weights for the load-time thread count.
+                    net.clear()
+                    net.opt.num_threads=self.inference_threads
+                    net.load_param(str(self.model_path/'model.ncnn.param'))
+                    net.load_model(str(self.model_path/'model.ncnn.bin'))
+                    model.track(dummy,**options)
+                for tracker in getattr(model.predictor,'trackers',[]): tracker.reset()
+                with self.lock:
+                    self.model=model
+                    self.model_status='ready'
+                    self.model_load_ms=round((self.clock()-began)*1000)
+            except Exception as exc:
+                with self.lock:
+                    self.model_status='error'
+                    self.model_error=str(exc)
+                print(f'YOLO_PRELOAD_ERROR: {exc}',flush=True)
+        self.model_thread=threading.Thread(target=load,name='yolo-preload',daemon=True)
+        self.model_thread.start()
+
+    def play(self, restart=False):
+        with self.lock:
+            if self.video is None: raise ValueError('Selezionare un video prima di Play')
+            if self.model_status == 'loading': raise ValueError('YOLO è ancora in preparazione')
+            if self.model_status == 'error': raise ValueError(self.model_error or 'Preparazione YOLO non riuscita')
+            if self.status in ('loading','running') and not restart: return self.snapshot()
+            if restart or self.status != 'paused':
+                self.source_generation+=1
+                self.reset_stream()
+                self.unavailable()
+                self.frames.clear()
+            self.status,self.error='loading',None
+        try:
+            self.start()
+        except ValueError as exc:
+            with self.lock:
+                self.status,self.error='error',str(exc)
+                self.unavailable()
+            raise
+        return self.snapshot()
+
+    def pause(self):
+        with self.lock:
+            if self.status not in ('loading','running'): raise ValueError('Il video non è in riproduzione')
+            self.status='paused'
+            self.unavailable()
+            return self.snapshot()
+
+    def stop_playback(self):
+        with self.lock:
+            if self.video is None: raise ValueError('Nessun video selezionato')
+            self.source_generation+=1
+            self.reset_stream()
+            self.unavailable()
+            self.frames.clear()
+            self.status,self.error='ready',None
+            return self.snapshot()
+
+    def restart(self):
+        return self.play(restart=True)
 
     def snapshot(self):
         with self.lock:
             age = None if self.received is None else max(0,round((self.clock()-self.received)*1000))
             return {**self.catalog.snapshot(self.video),'available':self.video is not None,'status':self.status,'error':self.error,'confidence':self.confidence,
+                    'model_status':self.model_status,'model_error':self.model_error,'model_load_ms':self.model_load_ms,
                     'source':self.video.name if self.video else None,'fresh':self.status == 'running' and age is not None and age < 750,
                     'age_ms':age,'frame':copy.deepcopy(self.current),'zones':self.zones.snapshot(),
                     'metrics':copy.deepcopy(self.events.snapshot()),'mode':'replay'}
@@ -129,15 +218,23 @@ class VisionService:
                 torch.set_num_threads(1)
                 cv2.setNumThreads(1)
             from ultralytics import YOLO
-            model = YOLO(str(self.model_path))
+            with self.lock: model=self.model
+            model = model or YOLO(str(self.model_path))
             # Round down to the stride: neither inference side may exceed imgsz.
             stride = max(int(v) for v in getattr(getattr(model,'model',None),'stride',[32]))
             inference_size = max(stride,(self.imgsz//stride)*stride)
             generation,previous_ms=-1,-1
             completed = deque(maxlen=30)
-            threads_configured = False
+            threads_configured = self.model is not None
             while not self.stop.is_set():
-                with self.lock: requested_generation,video=self.source_generation,self.video
+                with self.lock:
+                    playback_status=self.status
+                    requested_generation,video=self.source_generation,self.video
+                if playback_status == 'paused':
+                    self.stop.wait(.05)
+                    continue
+                if playback_status not in ('loading','running'):
+                    break
                 if generation != requested_generation:
                     if cap is not None: cap.release()
                     cap=cv2.VideoCapture(str(video))
@@ -234,6 +331,9 @@ class VisionService:
                 with self.lock:
                     # Drop a result that was inferred against polygons replaced mid-inference.
                     if config['revision'] != self.zones.snapshot()['revision'] or generation != self.source_generation: continue
+                    # Pause/stop issued during inference must not publish one
+                    # more observation after the user's command.
+                    if self.status not in ('loading','running'): continue
                     self.sequence = (self.sequence+1)&0xffffffff
                     obs = observation(self.stream,self.sequence,captured_ms,detections)
                     obs['age_ms'] = max(0,round(self.clock()*1000)-captured_ms)
@@ -251,7 +351,8 @@ class VisionService:
                     self.current = {'serial':self.serial,'stream':self.stream,'sequence':self.sequence,'video_frame':index,
                                     'video_ms':round((index-1)*1000/fps),'width':width,'height':height,
                                     'inference_ms':inference_ms,'fps':fps_actual,'inference_size':inference_size,'observation':obs,'detections':detections,'zones_revision':config['revision']}
-                    self.received,self.status,self.error = began,'running',None
+                    self.received,self.error = began,None
+                    if self.status != 'paused': self.status='running'
                 self.stop.wait(max(0,1/fps-(self.clock()-began)))
         except Exception as exc:
             with self.lock:

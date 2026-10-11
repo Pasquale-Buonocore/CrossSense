@@ -17,13 +17,10 @@ class VideoCatalog:
 
     def initial(self, fallback):
         files=self.files()
-        if self.selection_file and self.selection_file.exists():
-            try:
-                selected=json.loads(self.selection_file.read_text()).get('video')
-                if selected in files: return files[selected]
-            except (ValueError,TypeError,AttributeError): pass
         if fallback and Path(fallback).resolve() in files.values(): return Path(fallback)
-        return next(iter(files.values()),fallback)
+        # A catalog never selects a replay implicitly. The browser must choose
+        # a file and explicitly press Play after every app start.
+        return fallback
 
     def snapshot(self, current):
         files=self.files()

@@ -4,6 +4,10 @@ const {runInNewContext}=require('node:vm');
 const assert=require('node:assert/strict');
 const source=readFileSync(join(__dirname,'../static/app.js'),'utf8');
 const providers=readFileSync(join(__dirname,'../static/providers.js'),'utf8');
+const html=readFileSync(join(__dirname,'../static/index.html'),'utf8');
+assert.doesNotMatch(html,/<aside\b|class="notice"|class="breadcrumb"/);
+assert.match(html,/class="topbar"/);
+assert.match(html,/id="trial-controls"[\s\S]*id="trial-start"/);
 function node(){return {textContent:'',value:'',hidden:false,disabled:false,style:{},children:[],handlers:{},addEventListener(type,fn){this.handlers[type]=fn;},replaceChildren(){this.children=[];},append(){},prepend(child){this.children.unshift(child);},remove(){},className:''};}
 async function run(defaultMode){
   const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id);};
@@ -31,13 +35,16 @@ async function run(defaultMode){
     assert.equal(requestId,'000000000000000100000002ffffffff');
     assert.match(get('request-status').textContent,/in coda/);
     assert.equal(context.outputs.vehicle,'red');assert.equal(context.outputs.pedestrian,'green');
+    assert.equal(get('phase-name').textContent,'Verde pedoni');
+    assert.equal(get('ped-signal').textContent,'Verde');
     assert.equal(get('trial-start').hidden,false);assert.equal(get('trial-start').disabled,false);
     assert.match(get('trial-status').textContent,/completata/);
     await get('trial-start').handlers.click();
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(posts,1);assert.equal(get('trial-start').disabled,true);
     assert.match(get('trial-status').textContent,/in corso/);
-    assert.match(get('notice-detail').textContent,/board.test:8081/);
+    assert.equal(get('device-detail').textContent,'board.test:8081');
+    assert.equal(get('trial-controls').hidden,false);
   }else assert.equal(get('trial-start').hidden,true);
 }
 (async()=>{await run('hardware');await run('demo');console.log('APP_OK: default Hardware for Bridge, live MCU colors, repeat button and running state; standalone Demo preserved.');})().catch(e=>{console.error(e);process.exitCode=1;});

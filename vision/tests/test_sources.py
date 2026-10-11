@@ -10,7 +10,7 @@ from rt import RTService
 
 
 class SourceTests(unittest.TestCase):
-    def test_catalog_rejects_paths_and_symlinks_and_restores_choice(self):
+    def test_catalog_rejects_paths_and_never_autoselects_at_startup(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);videos=root/'videos';videos.mkdir()
             for name in ('one.mp4','two.mp4'): (videos/name).touch()
@@ -20,7 +20,7 @@ class SourceTests(unittest.TestCase):
             for name in ('../outside.mp4',str(root/'outside.mp4'),'link.mp4','missing.mp4'):
                 with self.assertRaises(ValueError):catalog.select({'video':name})
             catalog.select({'video':'two.mp4'})
-            self.assertEqual(VideoCatalog(videos,root/'selected.json').initial(None),(videos/'two.mp4').resolve())
+            self.assertIsNone(VideoCatalog(videos,root/'selected.json').initial(None))
 
     def test_symlinks_excluded(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -40,7 +40,11 @@ class SourceTests(unittest.TestCase):
             class RecordingRT(RTService):
                 def publish(self,frame):sent.append(frame);super().publish(frame)
             vision=VisionService(RecordingRT(),ZoneStore(root/'zones.json'),model=root/'model.pt',video_dir=videos)
+            self.assertIsNone(vision.video);self.assertEqual(vision.status,'idle')
+            vision.select_video({'video':'one.mp4'})
+            self.assertEqual(vision.status,'ready');self.assertIsNone(vision.thread)
             vision.thread=SimpleNamespace(is_alive=lambda:True)
+            vision.status='loading'
             old_stream=vision.stream;calls=[];resets=[];opened=[]
             class Capture:
                 def __init__(self,path):opened.append(Path(path).name)
@@ -50,7 +54,9 @@ class SourceTests(unittest.TestCase):
                 def release(self):pass
             def track(frame,**kwargs):
                 calls.append(1)
-                if len(calls)==1:vision.select_video({'video':'two.mp4'})
+                if len(calls)==1:
+                    vision.select_video({'video':'two.mp4'})
+                    vision.play()
                 else:vision.stop.set()
                 return [SimpleNamespace(boxes=None)]
             model=SimpleNamespace(track=track,predictor=SimpleNamespace(trackers=[SimpleNamespace(reset=lambda:resets.append(1))]))

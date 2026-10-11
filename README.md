@@ -2,6 +2,40 @@
 
 CrossSense è la dimostrazione HackTurin / GOMA Smart Crossing: elabora **replay MP4 dichiarati**, rileva persone, biciclette e veicoli e visualizza il controllo dell’attraversamento nella dashboard. Non usa camera live, LED, buzzer o altri attuatori fisici. Il video è preregistrato: i suoi attori non reagiscono ai semafori calcolati.
 
+## Demo in tre minuti
+
+La strada più breve per un valutatore con Arduino UNO Q è:
+
+1. generare il pacchetto con `python scripts/build_applab_zip.py`;
+2. importare lo ZIP prodotto in `dist/` da **Arduino App Lab → My Apps → Import**;
+3. premere **RUN** e aprire la dashboard sulla porta **8080**;
+4. scegliere uno dei due replay e premere **Play**;
+5. osservare rilevamenti, ROI, richiesta pedonale automatica, fasi STM32 e metriche;
+6. provare **Pausa**, **Stop / Riavvolgi**, le richieste manuali e la modifica delle zone.
+
+Nessun video parte automaticamente. Dopo RUN, YOLO viene caricato e riscaldato in background mentre il frame invita a scegliere un video; il tempo effettivo di preparazione viene mostrato nella dashboard. Senza osservazioni fresche il controller porta i segnali logici nello stato protetto. La guida mostrata dentro App Lab è il `firmware/README.md`; la procedura completa di packaging è in [Preparazione dello ZIP per Arduino App Lab](docs/app-lab-package.md).
+
+## Cosa valutare
+
+| Area | Evidenza nella demo |
+|---|---|
+| Visione locale | YOLO26n NCNN e ByteTrack sui replay inclusi, senza download a runtime |
+| Interpretazione della scena | ROI di attesa, attraversamento e approccio veicolare configurabili |
+| Controllo embedded | Macchina a stati C++ sulla STM32, alimentata via RouterBridge |
+| Protezione | Tutto rosso su dati assenti/obsoleti, conflitto o timeout di sgombero |
+| Interazione | Play/Pausa/Stop, richieste pedonali, accessibilità e priorità simulata |
+| Osservabilità | Fasi, tempi, rilevamenti, metriche, allarmi, errori Bridge ed export JSON |
+
+Il valore del prototipo è nell'integrazione riproducibile `replay → AI → Bridge → MCU → dashboard`, mantenendo separati il clock del video, il tempo reale del controller e il watchdog.
+
+## Perimetro e limiti dichiarati
+
+- I replay sono preregistrati e i loro attori non reagiscono ai semafori calcolati.
+- I segnali sono logici e visibili nella dashboard; non vengono comandati GPIO o impianti reali.
+- Non sono disponibili calibrazione metrica, velocità fisiche, TTC o certificazione di sicurezza.
+- Il controller e la dashboard sono stati collaudati sulla UNO Q; l'accuratezza dei conteggi a 320 non supera tutte le asserzioni dei replay noti.
+- Modello e video di distribuzione non sono versionati nel repository: il processo di preparazione ne controlla formato e coerenza.
+
 ## Percorso applicativo
 
 `MP4 → YOLO26n / ByteTrack → ROI → crosssense_update → controller C++ → dashboard`
@@ -34,23 +68,31 @@ Replay completo con controller nativo (G++ e ArduinoJson 7.4.3 disponibili):
 
 ```sh
 python scripts/build_native.py --arduino-json /percorso/ArduinoJson --output .local/replay-controller
-python dashboard/server.py --native-controller .local/replay-controller --video-dir .local/replays-480 --model models/yolo26n.pt --frame-size 480 --imgsz 320 --confidence 0.15 --inference-threads 2 --loop-video
+python dashboard/server.py --native-controller .local/replay-controller --video-dir .local/replays-480 --model models/yolo26n.pt --frame-size 480 --imgsz 320 --confidence 0.15 --inference-threads 2
 ```
 
-Su Windows usare `.local/replay-controller.exe`. Aprire `http://127.0.0.1:8080`. La dashboard identifica il controller nativo. Senza `--video` o `--video-dir` non viene avviata l’inferenza. Un modello mancante viene mostrato come errore senza abbattere il server; dopo averlo predisposto, selezionare nuovamente il video o premere Riprova.
+Su Windows usare `.local/replay-controller.exe`. Aprire `http://127.0.0.1:8080`. La dashboard identifica il controller nativo. Il catalogo non seleziona né avvia implicitamente un replay: scegliere un video e premere Play. Un modello mancante viene mostrato come errore senza abbattere il server.
 
 ## App Lab / UNO Q
 
+Per creare con un solo comando uno ZIP App Lab verificato, con i due MP4 fisicamente ridimensionati entro 480 pixel e `frame_size=480`:
+
 ```sh
-python scripts/prepare_replays.py --source simulation/output --destination .local/replays-480 --max-size 480
-python scripts/package_rt.py dist/crosssense-unoq-480-320 --video-dir .local/replays-480 --model /percorso/yolo26n_320_ncnn_model --controller-cycle --loop-video --frame-size 480 --imgsz 320 --confidence 0.15 --inference-threads 2 --zip
+python scripts/build_applab_zip.py
 ```
 
-Importare lo ZIP in App Lab e avviare l’app. Il pacchetto contiene `app.yaml`, `python/main.py`, dashboard, visione, video, modello e sketch. Il profilo corrente, concordato per la UNO Q, è video entro **480×480** (480×322 per questi replay), inferenza **320×320**, NCNN a due thread e confidenza 0,15. Gli asset ridotti preservano tutti i frame e i 30 FPS del file; la riproduzione elaborata può rallentare. Usare un modello NCNN esportato a **320**; non mescolare export e risoluzioni diverse. Il profilo firmware include la copia RouterBridge con buffer 1024 byte. Tutti i manifest usano `bricks: []`.
+La procedura, la distinzione tra risoluzione degli MP4 e input YOLO e tutte le opzioni sono descritte in [Preparazione dello ZIP per Arduino App Lab](docs/app-lab-package.md).
 
-Il profilo 960/640 verificato in precedenza sul PC è storico. A 320 il collaudo sulla scheda ha contato 2/0/1/1/0 invece di 4/0/1/3/0: consultare i risultati effettivi del [collaudo UNO Q](docs/unoq-validation.md), senza attribuire al profilo attuale i conteggi del precedente. Il pacchetto finale con i fix del browser e della coda richieste è `dist/crosssense-unoq-480-320.zip`. Il controllo e la dashboard sono collaudati; le asserzioni di accuratezza non sono tutte superate.
+```sh
+python scripts/prepare_replays.py --source simulation/output --destination .local/replays-480 --max-size 480
+python scripts/package_rt.py dist/crosssense-unoq-480-320 --video-dir .local/replays-480 --model /percorso/yolo26n_320_ncnn_model --controller-cycle --frame-size 480 --imgsz 320 --confidence 0.15 --inference-threads 2 --zip
+```
 
-Aggiornamento dell'11 ottobre: i due video della demo attiva (`fotoRealVideo.mp4` e `postProcessingVideo.mp4`) sono stati riesportati dagli originali a **716×480**, con altezza effettiva 480p. La preview usa `frame_size=716`; il modello resta NCNN FP32 a 320. FP16 e il candidato INT8 non hanno dato un'accelerazione utile sulla UNO Q, e INT8 ha peggiorato i conteggi host. Questo aggiornamento non è incluso nello ZIP storico sopra. Misure, limiti e riproduzione in [quantizzazione e video 480p](docs/quantization.md).
+Importare lo ZIP in App Lab e avviare l’app. Nessun replay parte automaticamente: scegliere un video nella dashboard e premere **Play**; sono disponibili anche **Pausa** e **Stop / Riavvolgi**. Il pacchetto contiene `app.yaml`, `python/main.py`, dashboard, visione, video, modello e sketch. Il profilo corrente, concordato per la UNO Q, è video entro **480×480** (480×322 per questi replay), inferenza **320×320**, export NCNN nativo a 320, due thread e confidenza 0,15. Gli asset ridotti preservano tutti i frame e gli FPS del file; la riproduzione elaborata può rallentare. Non mescolare export e risoluzioni diverse: il generatore ora rifiuta automaticamente un modello NCNN incompatibile. Il profilo firmware include la copia RouterBridge con buffer 1024 byte. Tutti i manifest usano `bricks: []`.
+
+Il profilo 960/640 verificato in precedenza sul PC è storico. A 320 il collaudo sulla scheda ha contato 2/0/1/1/0 invece di 4/0/1/3/0: consultare i risultati effettivi del [collaudo UNO Q](docs/unoq-validation.md), senza attribuire al profilo attuale i conteggi del precedente. Il controllo e la dashboard sono collaudati; le asserzioni di accuratezza non sono tutte superate. Lo ZIP corrente va sempre rigenerato con `build_applab_zip.py`, perché `dist/` è esclusa da Git.
+
+Aggiornamento dell'11 ottobre: i due video della demo (`fotoRealVideo.mp4` e `postProcessingVideo.mp4`) sono disponibili a **716×480**, ma il profilo App Lab corrente usa il default `frame_size=480`. La pipeline conserva le proporzioni e li elabora quindi a circa **480×322**; il modello resta NCNN FP32 a 320. Il precedente pacchetto sperimentale con `frame_size=716` non è il default perché aumenta il carico sulla UNO Q. FP16 e il candidato INT8 non hanno dato un'accelerazione utile, e INT8 ha peggiorato i conteggi host. Misure e limiti sono documentati in [quantizzazione e video 480p](docs/quantization.md).
 
 Il manifest alla radice è solo descrittivo: usare il pacchetto generato. La porta dell’app è 8080. Installazioni, build e download iniziali vanno eseguiti prima della prova senza Internet. Il runtime della visione disabilita rete e installazioni automatiche Ultralytics.
 
@@ -67,7 +109,20 @@ python scripts/check_unoq.py --url http://192.168.1.196:8080 --output .local/uno
 
 `check_all.py`, `check_standard_cycle.py` e `check_replays.py` usano processi host. `check_unoq.py` seleziona video e invia richieste alla app sulla scheda: eseguirlo senza altri produttori che cambino la sorgente. Le asserzioni dei conteggi restano quelle delle traiettorie note, anche quando il detector a 320 le perde: un fallimento va riportato, non sostituito con un valore inferiore.
 
-Per il confronto a fine video, nella app di collaudo disabilitare `loop` in `vision-source.json` e riavviare il container. Il pacchetto finale ha loop attivo: usare `scripts/check_unoq_loop.py --url http://192.168.1.196:8080 --output .local/unoq-loop.json` oppure `check_unoq.py --requests-only`. Procedure e risultati delle interruzioni controllate e del runtime offline sono nel documento di collaudo.
+Il pacchetto demo corrente ha loop disabilitato: a fine file il replay si ferma. Per collaudare esplicitamente il rollover, generare un pacchetto separato con `build_applab_zip.py --loop-video` e usare `scripts/check_unoq_loop.py`. Procedure e risultati delle interruzioni controllate e del runtime offline sono nel documento di collaudo.
+
+## Mappa del repository
+
+| Percorso | Contenuto |
+|---|---|
+| `vision/` | Pipeline YOLO/ByteTrack, identità, ROI e metriche replay |
+| `dashboard/` | Server HTTP, adapter Bridge e interfaccia web |
+| `firmware/` | App Lab di base, sketch STM32 e macchina a stati C++ |
+| `protocol/` | Contratto JSON Bridge v1 tra Linux e STM32 |
+| `scripts/` | Packaging, verifiche host e collaudi UNO Q |
+| `simulation/` | Generazione scenari e replay dichiarati |
+| `docs/` | Architettura, validazione, prestazioni e decisioni tecniche |
+| `apps/` | App diagnostiche storiche, non parte della demo finale |
 
 ## Documenti
 

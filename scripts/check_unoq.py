@@ -41,6 +41,7 @@ def main():
         if not args.requests_only:
             for video in ([args.video] if args.video else list(expected)):
                 selected=api('/api/vision/source',{'video':video})
+                api('/api/vision/play',{})
                 baseline=selected['metrics'];began=time.monotonic();last_progress=began
                 inference=[];rpc=[];age=[];fps=[];faults={};errors={};phases=set()
                 frame_serial=uptime=None;frames=connected=disconnected=0;jpeg_checked=False
@@ -93,6 +94,7 @@ def main():
                     disconnected_samples=disconnected,fault_samples=faults,transport_errors=errors,phases=sorted(phases),jpeg_verified=jpeg_checked)
                 reports.append(report);print(json.dumps(report),flush=True)
         selected=api('/api/vision/source',{'video':'output_2.mp4'})
+        api('/api/vision/play',{})
         def wait(predicate,timeout=75):
             began=time.monotonic()
             while time.monotonic()-began<timeout:

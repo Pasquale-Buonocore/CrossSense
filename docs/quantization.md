@@ -39,7 +39,7 @@ Questi conteggi non sono mAP, precision o recall delle box. Non equivalgono al p
 
 Su richiesta dell'utente gli originali 2528×1696 sono stati riesportati a **716×480**: 480 indica ora l'altezza, non il massimo dei due lati. Tutti i sette video sono disponibili in `.local/replays-480p`, con manifest SHA256. I due video attualmente usati dalla demo, `fotoRealVideo.mp4` e `postProcessingVideo.mp4`, sono stati codificati direttamente dagli originali in H.264 CRF 18; entrambi conservano 180 frame e 15 FPS. I cinque replay sintetici conservano 1980 frame complessivi e 30 FPS.
 
-La demo attiva conserva il modello FP32/320 e usa `frame_size=716`, così il limite della pipeline non riduce nuovamente il video a 480×322. Questo migliora il dettaglio della preview; il detector riceve ancora il suo ingresso a 320. Non si attribuisce alla sola preview maggiore un miglioramento misurato dell'accuracy. Il profilo 480/320 e lo ZIP del precedente collaudo restano artefatti storici: non rappresentano questo aggiornamento dei video.
+I file sorgente della demo conservano la risoluzione 716×480. Il profilo App Lab corrente usa però il default `frame_size=480`, quindi la pipeline li riduce a circa 480×322 mantenendo le proporzioni; il detector riceve il suo ingresso a 320. Il precedente pacchetto sperimentale con `frame_size=716` conserva più dettaglio nella preview ma aumenta il carico sulla UNO Q e non è più il default. Non si attribuisce alla sola preview maggiore un miglioramento misurato dell'accuracy.
 
 Backup sulla scheda: `/home/arduino/ArduinoApps/crosssense-replay-dashboard/.cache/video-480p-backup-20261011`, con video precedenti, configurazione e manifest. Il manifest attivo è stato aggiornato; il solo container Linux è stato riavviato.
 

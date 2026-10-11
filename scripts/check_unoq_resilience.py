@@ -41,12 +41,15 @@ def main():
             time.sleep(.05)
         raise AssertionError(('condition timeout',last))
     def healthy(r):return r['connected'] and r['state']['observation_valid']
+    def select_and_play(name):
+        call('/api/vision/source',{'video':name})
+        call('/api/vision/play',{})
     def passed(name,**evidence):
         checks.append(dict(check=name,**evidence));print('RESILIENCE_OK',name,flush=True)
     bad=args.app/'python/vision/assets/videos/test-invalid.mp4'
     paused=False;asset_created=False
     try:
-        call('/api/vision/source',{'video':'output_2.mp4'});before=wait(healthy)
+        select_and_play('output_2.mp4');before=wait(healthy)
         event=before['events'][-1]['id'] if before['events'] else 0
         rows=command('docker','top',args.container,'-eo','pid,args').splitlines()
         workers=[int(r.split()[0]) for r in rows if '/dashboard/bridge_worker.py' in r]
@@ -72,7 +75,7 @@ def main():
         if bad.exists():raise ValueError('Test asset already exists')
         bad.write_bytes(b'invalid replay for controlled test')
         asset_created=True
-        call('/api/vision/source',{'video':bad.name})
+        select_and_play(bad.name)
         wait(lambda r:r['state'] and r['state']['phase']=='FAULT')
         began=time.monotonic()
         while time.monotonic()-began<15:
@@ -80,10 +83,18 @@ def main():
             if vision['status']=='error':break
             time.sleep(.1)
         assert vision['status']=='error' and not vision['fresh'],vision
-        call('/api/vision/source',{'video':'output_2.mp4'});wait(healthy)
+        select_and_play('output_2.mp4');wait(healthy)
         bad.unlink();asset_created=False;passed('invalid_video_error_and_recovery',error=vision['error'])
         before=wait(healthy)
-        command('docker','restart',args.container);after=wait(healthy,timeout=120)
+        command('docker','restart',args.container)
+        began=time.monotonic()
+        while True:
+            try:
+                select_and_play('output_2.mp4');break
+            except OSError:
+                if time.monotonic()-began>120:raise
+                time.sleep(.5)
+        after=wait(healthy,timeout=120)
         assert before['state']['applied_stream']!=after['state']['applied_stream']
         passed('linux_process_restart',new_stream=after['state']['applied_stream'])
         if args.mcu_upload:

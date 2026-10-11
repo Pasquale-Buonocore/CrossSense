@@ -4,12 +4,14 @@ const zoneColors={waiting_left:'#a4d65e',crossing:'#53e5bc',waiting_right:'#ffd1
 class VisionView {
   constructor(){
     this.mode='demo';this.data=null;this.polling=false;this.editing=false;this.saving=false;this.serial=null;
-    this.image=document.getElementById('preview-frame');this.layer=document.getElementById('vision-zones');
+    this.image=document.getElementById('preview-frame');this.layer=document.getElementById('vision-zones');this.emptyState=document.getElementById('video-empty-state');
     this.controls=document.getElementById('zone-controls');this.note=document.getElementById('zone-note');
     this.select=document.getElementById('zone-select');this.draft=null;
     this.videoSelect=document.getElementById('video-select');this.changingVideo=false;this.sourceToken=0;
     this.videoSelect.addEventListener('change',()=>this.changeVideo());
-    document.getElementById('video-retry').addEventListener('click',()=>this.changeVideo(true));
+    document.getElementById('video-play').addEventListener('click',()=>this.controlVideo('play'));
+    document.getElementById('video-pause').addEventListener('click',()=>this.controlVideo('pause'));
+    document.getElementById('video-stop').addEventListener('click',()=>this.controlVideo('stop'));
     document.getElementById('zone-edit').addEventListener('click',()=>this.toggleEditor());
     document.getElementById('zone-cancel').addEventListener('click',()=>this.closeEditor());
     document.getElementById('zone-clear').addEventListener('click',()=>{this.draft.config.zones[this.select.value]=[];this.draw();});
@@ -41,7 +43,7 @@ class VisionView {
     this.imageLoading=true;let url=null;
     try{
       const response=await fetch(`/api/vision/frame.jpg?serial=${serial}`,{cache:'no-store'});
-      if(!response.ok)throw Error('Frame scaduto');
+      if(!response.ok)throw Error('Fotogramma scaduto');
       url=URL.createObjectURL(await response.blob());
       const image=new Image();
       await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});
@@ -60,24 +62,41 @@ class VisionView {
     const videos=data?.videos||[],catalogKey=JSON.stringify(videos);
     if(catalogKey!==this.catalogKey){
       this.catalogKey=catalogKey;this.videoSelect.replaceChildren();
-      if(!videos.length){const option=document.createElement('option');option.value='';option.textContent='Nessun video disponibile';this.videoSelect.append(option);}
+      const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=videos.length?'Seleziona un video…':'Nessun video disponibile';this.videoSelect.append(placeholder);
       for(const video of videos){const option=document.createElement('option');option.value=video.id;option.textContent=video.label;this.videoSelect.append(option);}
     }
     if(!this.changingVideo)this.videoSelect.value=data?.selected_video||'';
     this.videoSelect.disabled=mode!=='hardware'||!videos.length||this.editing||this.changingVideo;
-    const retry=document.getElementById('video-retry');
-    if(retry)retry.disabled=mode!=='hardware'||!data?.available||this.editing||this.changingVideo;
-    this.image.alt=mode==='hardware'?'Video elaborato con bounding box, classi e confidenze YOLO':'Frame della simulazione locale';
+    const blocked=mode!=='hardware'||this.editing||this.changingVideo,status=data?.status;
+    const modelReady=!data?.model_status||data.model_status==='ready';
+    document.getElementById('video-play').disabled=blocked||!data?.selected_video||!modelReady||status==='loading'||status==='running';
+    document.getElementById('video-pause').disabled=blocked||!['loading','running'].includes(status);
+    document.getElementById('video-stop').disabled=blocked||!data?.selected_video||['idle','ready'].includes(status);
+    this.image.alt=mode==='hardware'?'Video elaborato con riquadri, classi e confidenze YOLO':'Fotogramma della simulazione locale';
     document.getElementById('zone-edit').disabled=!data?.zones||this.editing;
     if(!this.editing)this.note.textContent=data?.zones?'Zone condivise · modifica i poligoni direttamente sul frame.':'Caricamento delle zone…';
     if(mode==='hardware'){
       const fresh=data?.fresh&&data.frame&&(data.age_ms+(Date.now()-this.receivedAt)<750),frame=data?.frame;
-      const status={idle:'Nessun video caricato',loading:'Caricamento YOLO…',completed:'Video terminato',error:'Errore visione',stopped:'Video fermato'}[data?.status]||'Osservazioni obsolete';
-      document.getElementById('vision-badge').textContent=fresh?'● YOLO':status;
-      document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza · ${fresh?(frame?.fps??'—'):'—'} FPS`:'Video MP4 · configurare la sorgente sul server';
+      const status={idle:'Seleziona un video',ready:'Pronto · premi Riproduci',loading:'Avvio video…',paused:'Video in pausa',completed:'Video terminato',error:'Errore visione',stopped:'Video fermato'}[data?.status]||'Osservazioni obsolete';
+      const modelLabel=data?.model_status==='loading'?'Preparazione YOLO…':data?.model_status==='error'?'Errore modello':data?.model_status==='ready'?(data.model_load_ms?`YOLO pronto · ${(data.model_load_ms/1000).toFixed(1)} s`:'YOLO pronto'):'Preparazione modello…';
+      document.getElementById('vision-badge').textContent=fresh?'● YOLO':data?.model_status==='error'?'Errore modello':!data?.selected_video&&data?.model_status==='loading'?'Preparazione YOLO…':status;
+      document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza · ${fresh?(frame?.fps??'—'):'—'} fotogrammi/s`:`Seleziona un video e premi Riproduci · ${modelLabel}`;
       document.getElementById('scene-source').textContent=this.editing?'MODIFICA ZONE · FRAME FERMO':fresh?'VIDEO MP4 · YOLO26 + BYTETRACK':status.toUpperCase();
-      document.getElementById('notice-detail').textContent=data?.available?'Video YOLO · lo stato del controller è mostrato separatamente.':'Stato RT dal servizio · video MP4 non configurato.';
-      document.getElementById('vision-detail').textContent=data?.error||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · frame video ${frame.video_frame} · ${Math.round(frame.video_ms/1000)} s · ROI revisione ${frame.zones_revision}`:status);
+      document.getElementById('vision-detail').textContent=data?.model_error||data?.error||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · frame video ${frame.video_frame} · ${Math.round(frame.video_ms/1000)} s · ROI revisione ${frame.zones_revision}`:status);
+      const finished=data?.status==='completed';
+      const showGuide=!this.editing&&(!data?.selected_video||data?.status==='ready'||finished||(data?.status==='loading'&&!frame));
+      this.emptyState.hidden=!showGuide;
+      this.emptyState.classList.toggle('loading',data?.model_status==='loading'||data?.status==='loading');
+      this.emptyState.classList.toggle('completed',finished);
+      if(showGuide){
+        const icon=document.getElementById('video-empty-icon'),title=document.getElementById('video-empty-title'),detail=document.getElementById('video-empty-detail');
+        icon.textContent=finished?'↻':'▶';
+        if(!data?.selected_video){title.textContent='1. Seleziona un video';detail.textContent=data?.model_status==='error'?`YOLO non è disponibile: ${data.model_error||'errore di preparazione'}`:data?.model_status==='loading'?'Usa il menu a destra. Intanto CrossSense sta preparando YOLO in background.':'Usa il menu a destra, poi premi Riproduci.';}
+        else if(finished){title.textContent='Video terminato';detail.textContent='Premi Riproduci per avviarlo di nuovo oppure seleziona un altro video.';}
+        else if(data?.model_status==='loading'){title.textContent='YOLO si sta preparando';detail.textContent='Il video è selezionato. Riproduci sarà disponibile appena il modello sarà pronto.';}
+        else if(data?.status==='loading'){title.textContent='Avvio del replay';detail.textContent='Il modello è già pronto: attendo il primo frame elaborato.';}
+        else{title.textContent='2. Premi Riproduci';detail.textContent='Il video è selezionato e YOLO è pronto.';}
+      }
       const obs=fresh?frame.observation:null;
       document.getElementById('occupied').textContent=obs?.crossing==='occupied'?'Occupato':obs?.valid&&obs.crossing==='clear'?'Libero':'Sconosciuto';
       document.getElementById('occupancy-detail').textContent=obs?.valid?'Osservazione YOLO corrente':obs?(frame.detections.length>8?'Più di 8 oggetti · osservazione RT invalida':'Tracking non disponibile'):'Nessuna osservazione YOLO fresca';
@@ -86,22 +105,38 @@ class VisionView {
       document.getElementById('wait-detail').textContent=obs?.valid?`Sinistra ${count('waiting_left')} · Destra ${count('waiting_right')}`:'Conteggi non disponibili';
       if(!frame&&!this.editing&&this.serial===null&&!this.image.src.endsWith('/api/vision/reference.jpg'))this.image.src='/api/vision/reference.jpg';
     }else{
-      document.getElementById('vision-detail').textContent='Simulazione locale · seleziona Hardware per il video YOLO';
+      this.emptyState.hidden=true;
+      document.getElementById('vision-detail').textContent='Simulazione locale · seleziona Video / Controller per usare YOLO';
       if(this.editing)document.getElementById('scene-source').textContent='MODIFICA ZONE · FRAME DI RIFERIMENTO';
     }
     this.draw();
   }
-  async changeVideo(restart=false){
+  async changeVideo(){
     if(this.changingVideo||this.editing)return;
+    if(!this.videoSelect.value)return;
     this.changingVideo=true;this.sourceToken++;this.videoSelect.disabled=true;
-    if(this.data)this.data={...this.data,status:'loading',fresh:false,frame:null};
+    if(this.data)this.data={...this.data,status:'ready',fresh:false,frame:null};
     this.render(this.mode);
-    const note=document.getElementById('video-note');note.textContent='Cambio video…';
+    const note=document.getElementById('video-note');note.textContent='Selezione video…';
     try{
-      const response=await fetch(restart?'/api/vision/restart':'/api/vision/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(restart?{}:{video:this.videoSelect.value})});
+      const response=await fetch('/api/vision/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video:this.videoSelect.value})});
       const data=await response.json();if(!response.ok)throw Error(data.error||'Cambio video non riuscito');
       this.data=data;this.serial=null;this.image.src='/api/vision/reference.jpg';
-      note.textContent='Video selezionato · tracking riavviato.';
+      note.textContent='Video selezionato · premi Riproduci per avviare.';
+    }catch(e){note.textContent=e.message;}
+    finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
+  }
+  async controlVideo(action){
+    if(this.changingVideo||this.editing)return;
+    this.changingVideo=true;this.sourceToken++;
+    const note=document.getElementById('video-note');
+    note.textContent={play:'Avvio video…',pause:'Pausa…',stop:'Arresto e riavvolgimento…'}[action];
+    try{
+      const response=await fetch(`/api/vision/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const data=await response.json();if(!response.ok)throw Error(data.error||'Comando video non riuscito');
+      this.data=data;
+      if(action==='stop'){this.serial=null;this.image.src='/api/vision/reference.jpg';}
+      note.textContent={play:'Riproduzione avviata.',pause:'Video in pausa · Riproduci per riprendere.',stop:'Video fermato e riavvolto.'}[action];
     }catch(e){note.textContent=e.message;}
     finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
   }

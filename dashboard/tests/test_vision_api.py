@@ -18,10 +18,15 @@ class VisionAPITests(TrialAPITests):
         old=vision.stream
         self.assertEqual(len(self.call('/api/vision')[1]['videos']),2)
         self.assertEqual(self.call('/api/vision/source',{'video':'../elsewhere.mp4'})[0],400)
-        with patch.object(vision,'start'):
-            code,data=self.call('/api/vision/source',{'video':'two.mp4'})
+        code,data=self.call('/api/vision/source',{'video':'two.mp4'})
         self.assertEqual(code,200);self.assertEqual(data['selected_video'],'two.mp4')
+        self.assertEqual(data['status'],'ready');self.assertIsNone(vision.thread)
         self.assertNotEqual(vision.stream,old);self.assertFalse(self.server.rt.latest[0]['valid'])
+        with patch.object(vision,'start') as start:
+            code,data=self.call('/api/vision/play',{})
+        self.assertEqual(code,200);self.assertEqual(data['status'],'loading');start.assert_called_once()
+        self.assertEqual(self.call('/api/vision/pause',{})[1]['status'],'paused')
+        self.assertEqual(self.call('/api/vision/stop',{})[1]['status'],'ready')
     def test_editor_save_conflict_and_source_ownership(self):
         code,data=self.call('/api/vision/zones');self.assertEqual(code,200)
         self.assertEqual(self.call('/api/vision/zones',data)[0],200)
