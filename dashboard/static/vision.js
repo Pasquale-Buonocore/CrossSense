@@ -105,7 +105,7 @@ class VisionView {
         const icon=document.getElementById('video-empty-icon'),title=document.getElementById('video-empty-title'),detail=document.getElementById('video-empty-detail');
         icon.textContent=finished?'↻':'▶';
         if(mode==='camera'){icon.textContent='●';title.textContent=data?.status==='error'?'Telecamera non disponibile':'Telecamera CAM0';detail.textContent=visibleMessage(data?.error)||'Premi Avvia telecamera per acquisire e analizzare i frame live.';}
-        else if(!data?.selected_video){title.textContent='1. Seleziona un video';detail.textContent=data?.model_status==='error'?`YOLO non è disponibile: ${visibleMessage(data.model_error)||'errore di preparazione'}`:data?.model_status==='loading'?'Usa il menu a destra. Intanto CrossSense sta preparando YOLO in background.':'Usa il menu a destra, poi premi Riproduci.';}
+        else if(!data?.selected_video){title.textContent='1. Seleziona un video';detail.textContent=data?.model_status==='error'?`YOLO non è disponibile: ${visibleMessage(data.model_error)||'errore di preparazione'}`:data?.model_status==='loading'?'Usa il menu qui sotto. Intanto CrossSense sta preparando YOLO in background.':'Usa il menu qui sotto, poi premi Riproduci.';}
         else if(finished){title.textContent='Video terminato';detail.textContent='Premi Riproduci per avviarlo di nuovo oppure seleziona un altro video.';}
         else if(data?.model_status==='loading'){title.textContent='YOLO si sta preparando';detail.textContent='Il video è selezionato. Riproduci sarà disponibile appena il modello sarà pronto.';}
         else if(data?.status==='loading'){title.textContent='Avvio del replay';detail.textContent='Il modello è già pronto: attendo il primo frame elaborato.';}
