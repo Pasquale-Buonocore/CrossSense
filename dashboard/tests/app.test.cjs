@@ -44,5 +44,10 @@ runInNewContext(providers+'\n'+source.replace('initialize();','globalThis.ready=
   assert.equal(get('occupied').textContent,'Libero','controller rendering must not overwrite the vision-owned crossing');
   assert.equal(get('waiting').textContent,'2','controller rendering must not reset vision counts');
   assert.equal(get('count').textContent,'7','controller rendering must not reset analytics counts');
+  const beforeEvents=get('event-list').children.length;
+  context.event('Tempo scaduto',true);context.event('RPC oltre budget 250 ms',true);
+  assert.equal(get('event-list').children.length,beforeEvents,'timeout events must not add visible rows');
+  assert.equal(context.controllerText.code('TIMEOUT'),'');
+  assert.equal(context.controllerText.code('CLEARANCE_TIMEOUT'),'');
   console.log('APP_OK: new viewers preserve the shared source, remote changes synchronize, explicit selection sends commands.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

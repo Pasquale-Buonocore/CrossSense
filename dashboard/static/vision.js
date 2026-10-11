@@ -83,20 +83,19 @@ class VisionView {
     document.getElementById('zone-edit').disabled=!data?.zones||this.editing||(mode==='camera'&&!data.frame);
     if(!this.editing)this.note.textContent=data?.zones?`Zone ${mode==='camera'?'telecamera':'replay'} · modifica i poligoni direttamente sul frame.`:'Caricamento delle zone…';
     if(mode==='replay'||mode==='camera'){
-      const fresh=data?.fresh&&data.frame&&(data.age_ms+(Date.now()-this.receivedAt)<750),frame=data?.frame;
+      const frame=data?.frame;
       // The badge reports recent source activity, not permission to use the
       // cached observation. Wi-Fi jitter must not make YOLO appear stopped.
       const sourceActive=data?.fresh&&frame&&Date.now()-this.receivedAt<2000;
-      // An expired browser cache is not evidence that inference stopped.
-      // Keep expired observations unusable, but distinguish transport delay
-      // from a stale acquisition explicitly reported by the server.
-      const statusText={idle:'Seleziona un video',ready:mode==='camera'?'Pronto · premi Avvia':'Pronto · premi Riproduci',loading:mode==='camera'?'Avvio telecamera…':'Avvio video…',paused:'Video in pausa',completed:'Video terminato',error:'Errore visione',stopped:'Sorgente fermata'}[data?.status]||(data?.fresh?'Aggiornamento osservazioni…':'Osservazioni obsolete');
+      // Timing diagnostics are omitted from presentation; expired or invalid
+      // observations still cannot supply the crossing state or counts.
+      const statusText={idle:'Seleziona un video',ready:mode==='camera'?'Pronto · premi Avvia':'Pronto · premi Riproduci',loading:mode==='camera'?'Avvio telecamera…':'Avvio video…',paused:'Video in pausa',completed:'Video terminato',error:'Errore visione',stopped:'Sorgente fermata'}[data?.status]||'YOLO';
       const modelLabel=data?.model_status==='loading'?'Preparazione YOLO…':data?.model_status==='error'?'Errore modello':data?.model_status==='ready'?(data.model_load_ms?`YOLO pronto · ${(data.model_load_ms/1000).toFixed(1)} s`:'YOLO pronto'):'Preparazione modello…';
       document.getElementById('vision-badge').textContent=sourceActive?'● YOLO':data?.model_status==='error'?'Errore modello':statusText;
       document.getElementById('vision-description').textContent=data?.source?`${data.source} · ${frame?.inference_ms??'—'} ms inferenza · ${sourceActive?(frame?.fps??'—'):'—'} fotogrammi/s`:`Seleziona un video e premi Riproduci · ${modelLabel}`;
       document.getElementById('scene-source').textContent=this.editing?'MODIFICA ZONE · FRAME FERMO':sourceActive?(mode==='camera'?'CAM0 · YOLO26 + BYTETRACK':'VIDEO MP4 · YOLO26 + BYTETRACK'):statusText.toUpperCase();
-      document.getElementById('vision-detail').textContent=data?.model_error||data?.error||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · ${mode==='camera'?'tempo live':'frame video '+frame.video_frame} · ROI revisione ${frame.zones_revision}`:statusText);
-      document.getElementById('camera-note').textContent=mode==='camera'?(data?.error||(!data?.camera_calibrated&&frame?'Configura e salva le ROI della camera prima di inviare osservazioni valide alla STM32.':statusText)):'';
+      document.getElementById('vision-detail').textContent=visibleMessage(data?.model_error)||visibleMessage(data?.error)||(frame?`${frame.width}×${frame.height} · ${frame.detections.length} oggetti · ${mode==='camera'?'tempo live':'frame video '+frame.video_frame} · ROI revisione ${frame.zones_revision}`:statusText);
+      document.getElementById('camera-note').textContent=mode==='camera'?(visibleMessage(data?.error)||(!data?.camera_calibrated&&frame?'Configura e salva le ROI della camera prima di inviare osservazioni valide alla STM32.':statusText)):'';
       const finished=data?.status==='completed';
       const showGuide=!this.editing&&(mode==='camera'?(!frame&&status!=='running'):(!data?.selected_video||data?.status==='ready'||finished||(data?.status==='loading'&&!frame)));
       this.emptyState.hidden=!showGuide;
@@ -105,22 +104,21 @@ class VisionView {
       if(showGuide){
         const icon=document.getElementById('video-empty-icon'),title=document.getElementById('video-empty-title'),detail=document.getElementById('video-empty-detail');
         icon.textContent=finished?'↻':'▶';
-        if(mode==='camera'){icon.textContent='●';title.textContent=data?.status==='error'?'Telecamera non disponibile':'Telecamera CAM0';detail.textContent=data?.error||'Premi Avvia telecamera per acquisire e analizzare i frame live.';}
-        else if(!data?.selected_video){title.textContent='1. Seleziona un video';detail.textContent=data?.model_status==='error'?`YOLO non è disponibile: ${data.model_error||'errore di preparazione'}`:data?.model_status==='loading'?'Usa il menu a destra. Intanto CrossSense sta preparando YOLO in background.':'Usa il menu a destra, poi premi Riproduci.';}
+        if(mode==='camera'){icon.textContent='●';title.textContent=data?.status==='error'?'Telecamera non disponibile':'Telecamera CAM0';detail.textContent=visibleMessage(data?.error)||'Premi Avvia telecamera per acquisire e analizzare i frame live.';}
+        else if(!data?.selected_video){title.textContent='1. Seleziona un video';detail.textContent=data?.model_status==='error'?`YOLO non è disponibile: ${visibleMessage(data.model_error)||'errore di preparazione'}`:data?.model_status==='loading'?'Usa il menu a destra. Intanto CrossSense sta preparando YOLO in background.':'Usa il menu a destra, poi premi Riproduci.';}
         else if(finished){title.textContent='Video terminato';detail.textContent='Premi Riproduci per avviarlo di nuovo oppure seleziona un altro video.';}
         else if(data?.model_status==='loading'){title.textContent='YOLO si sta preparando';detail.textContent='Il video è selezionato. Riproduci sarà disponibile appena il modello sarà pronto.';}
         else if(data?.status==='loading'){title.textContent='Avvio del replay';detail.textContent='Il modello è già pronto: attendo il primo frame elaborato.';}
         else{title.textContent='2. Premi Riproduci';detail.textContent='Il video è selezionato e YOLO è pronto.';}
       }
       // Display the last server-confirmed observation across a brief web gap.
-      // Its age is still explicit; this display never feeds the MCU watchdog.
+      // This presentation never feeds the MCU watchdog.
       const obs=sourceActive?frame.observation:null;
-      const lastKnown=obs?.valid&&!fresh;
       document.getElementById('occupied').textContent=obs?.crossing==='occupied'?'Occupato':obs?.valid&&obs.crossing==='clear'?'Libero':'Sconosciuto';
-      document.getElementById('occupancy-detail').textContent=obs?.valid?(lastKnown?'Ultimo dato ricevuto · aggiornamento ritardato':'Osservazione YOLO corrente'):mode==='camera'&&!data?.camera_calibrated?'ROI camera da configurare':obs?(frame.detections.length>8?'Più di 8 oggetti · osservazione RT invalida':'Tracking non disponibile'):'Nessuna osservazione YOLO fresca';
+      document.getElementById('occupancy-detail').textContent=obs?.valid?'Rilevamento dell’attraversamento':mode==='camera'&&!data?.camera_calibrated?'ROI camera da configurare':obs?(frame.detections.length>8?'Più di 8 oggetti · osservazione RT invalida':'Tracking non disponibile'):'Rilevamento dell’attraversamento';
       const count=zone=>data?.metrics?.waiting?.[zone]??0;
       document.getElementById('waiting').textContent=obs?.valid?count('waiting_left')+count('waiting_right'):'—';
-      document.getElementById('wait-detail').textContent=obs?.valid?`${lastKnown?'Ultimo dato · ':''}Sinistra ${count('waiting_left')} · Destra ${count('waiting_right')}`:'Conteggi non disponibili';
+      document.getElementById('wait-detail').textContent=obs?.valid?`Sinistra ${count('waiting_left')} · Destra ${count('waiting_right')}`:'Conteggi non disponibili';
       if(!frame&&!this.editing&&this.serial===null&&!this.image.src.endsWith('/api/vision/reference.jpg'))this.image.src='/api/vision/reference.jpg';
     }
     this.draw();
@@ -137,7 +135,7 @@ class VisionView {
       const data=await response.json();if(!response.ok)throw Error(data.error||'Cambio video non riuscito');
       this.data=data;this.serial=null;this.image.src='/api/vision/reference.jpg';
       note.textContent='Video selezionato · premi Riproduci per avviare.';
-    }catch(e){note.textContent=e.message;}
+    }catch(e){note.textContent=visibleMessage(e.message);}
     finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
   }
   async controlVideo(action){
@@ -151,7 +149,7 @@ class VisionView {
       this.data=data;
       if(action==='stop'){this.serial=null;this.image.src='/api/vision/reference.jpg';}
       note.textContent={play:'Riproduzione avviata.',pause:'Video in pausa · Riproduci per riprendere.',stop:'Video fermato e riavvolto.'}[action];
-    }catch(e){note.textContent=e.message;}
+    }catch(e){note.textContent=visibleMessage(e.message);}
     finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
   }
   async controlCamera(action){
@@ -164,7 +162,7 @@ class VisionView {
       this.data=data;
       if(action==='stop'){this.serial=null;this.image.style.visibility='hidden';}
       note.textContent=action==='play'?'Telecamera avviata.':'Telecamera fermata.';
-    }catch(e){note.textContent=e.message;}
+    }catch(e){note.textContent=visibleMessage(e.message);}
     finally{this.changingVideo=false;this.render(this.mode);this.refresh();}
   }
   toggleEditor(){
@@ -202,7 +200,7 @@ class VisionView {
       const response=await fetch('/api/vision/zones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.draft)});
       const result=await response.json();if(!response.ok)throw Error(result.error||'Salvataggio non riuscito');
       this.data={...this.data,zones:result};this.saving=false;this.closeEditor();this.note.textContent='Zone salvate · tracking e osservazioni riavviati.';
-    }catch(e){this.editorError=e.message;this.note.textContent=e.message;}
+    }catch(e){this.editorError=visibleMessage(e.message);this.note.textContent=visibleMessage(e.message);}
     finally{this.saving=false;this.controls.querySelectorAll('button,select').forEach(el=>el.disabled=false);}
   }
 }

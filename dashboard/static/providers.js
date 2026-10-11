@@ -1,4 +1,9 @@
 'use strict';
+// Presentation-only filtering; acquisition deadlines and watchdogs stay active.
+function visibleMessage(value){
+  const message=String(value??'');
+  return /timeout|timed out|deadline|stale|old_frame|scadut|obsolet|ritard|instabil|oltre budget|entro\s+\d+\s*(?:ms|s)\b/i.test(message)?'':message;
+}
 // The browser displays controller telemetry; source selection belongs to the server.
 const phases = [{name:'Verde veicoli',sub:'Attraversamento pedonale in attesa',duration:18,light:'green'},{name:'Transizione',sub:'Chiusura del flusso veicolare',duration:3,light:'amber'},{name:'Verde pedoni',sub:'Attraversamento protetto',duration:12,light:'red'},{name:'Sgombero',sub:'Verifica delle strisce prima del verde',duration:4,light:'red'}];
 const unstableAfterMs=4000,offlineAfterMs=10000;

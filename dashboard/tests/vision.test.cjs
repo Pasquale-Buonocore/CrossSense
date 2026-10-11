@@ -14,7 +14,7 @@ const context={AbortController,setTimeout,clearTimeout,document:{getElementById:
   calls++;
   return {ok:true,json:async()=>({available:true,mode:'replay',status:'running',fresh:true,age_ms:300,source:'video.mp4',videos:[],frame:{serial,inference_ms:170,fps:5,width:480,height:322,detections:[],observation:{valid:true,crossing:'clear'}}})};
 }};
-runInNewContext(readFileSync(join(__dirname,'../static/vision.js'),'utf8').replace('globalThis.visionView=new VisionView();','globalThis.VisionView=VisionView;'),context);
+runInNewContext(readFileSync(join(__dirname,'../static/providers.js'),'utf8')+'\n'+readFileSync(join(__dirname,'../static/vision.js'),'utf8').replace('globalThis.visionView=new VisionView();','globalThis.VisionView=VisionView;'),context);
 const view=Object.create(context.VisionView.prototype);
 Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',image:node(),emptyState:node(),videoSelect:Object.assign(node(),{value:'next.mp4'}),note:node(),serial:null,draw(){}});
 (async()=>{
@@ -38,21 +38,21 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  for(const [crossing,label] of [['clear','Libero'],['occupied','Occupato']]){
   view.data.frame.observation.crossing=crossing;view.render('replay');
   assert.equal(get('occupied').textContent,label,'a brief web gap preserves the last server-confirmed crossing state');
-  assert.match(get('occupancy-detail').textContent,/Ultimo dato ricevuto/,'the retained state must be identified as historical');
+  assert.equal(get('occupancy-detail').textContent,'Rilevamento dell’attraversamento','brief web gaps do not show timing diagnostics');
  }
  view.data.frame.observation={valid:false,crossing:'unknown'};view.render('replay');
  assert.equal(get('occupied').textContent,'Sconosciuto','new invalid tracking is not covered by display grace');
  view.data.frame.observation={valid:true,crossing:'clear'};
  view.data.fresh=false;view.render('replay');
- assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server staleness bypasses transport grace immediately');
+ assert.equal(get('vision-badge').textContent,'YOLO','server staleness does not expose timeout copy');
  assert.equal(get('occupied').textContent,'Sconosciuto','server staleness invalidates the displayed crossing immediately');
  view.data.fresh=true;
  now=2400;view.render('replay');
- assert.equal(get('vision-badge').textContent,'Aggiornamento osservazioni…','a prolonged metadata gap must still be visible');
+ assert.equal(get('vision-badge').textContent,'YOLO','a prolonged gap uses a neutral badge');
  assert.equal(get('occupied').textContent,'Sconosciuto','the retained crossing expires after a prolonged web gap');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  view.data.fresh=false;view.render('replay');
- assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','server-reported stale acquisitions must still be visible');
+ assert.equal(get('vision-badge').textContent,'YOLO','server staleness uses a neutral badge');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  failMetadata=false;
  const transport=context.fetch;
@@ -62,6 +62,11 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  await stalled;assert.equal(view.polling,false,'timed-out metadata request releases polling');
  context.fetch=transport;
  await view.refresh();assert.equal(get('vision-badge').textContent,'● YOLO','polling recovers after a hung request');
+ view.data.error='Nessun frame dalla telecamera entro 1 s';view.data.model_error='Inference timeout';view.render('replay');
+ for(const element of nodes.values())assert.doesNotMatch(String(element.textContent),/timeout|scadut|obsolet|ritard|ultimo dato|entro 1 s/i,'timing diagnostics must not leak through small text');
+ view.render('camera');
+ assert.doesNotMatch(get('camera-note').textContent,/timeout|entro 1 s/i,'camera timing errors are hidden too');
+ delete view.data.error;delete view.data.model_error;
  view.data={available:true,mode:'replay',status:'completed',model_status:'ready',fresh:false,source:'video.mp4',selected_video:'video.mp4',videos:[{id:'video.mp4',label:'Video'}],frame:null};
  view.receivedAt=now;view.render('replay');
  assert.equal(view.emptyState.hidden,false,'completed video must show the end-state overlay');
@@ -78,5 +83,5 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',imag
  assert.equal(view.data.frame,null,'old detections must not enable a command for a new source');
  finish({ok:true,json:async()=>({available:true,status:'ready',fresh:false,source:'next.mp4',selected_video:'next.mp4',videos:[],frame:null})});
  await change;assert.equal(view.changingVideo,false);
- console.log('VISION_UI_OK: metadata polls during JPEG loads, eviction preserves observations, genuine staleness still displayed.');
+ console.log('VISION_UI_OK: polling recovers, invalid observations expire, timeout diagnostics stay hidden.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

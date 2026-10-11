@@ -3,9 +3,9 @@ const $ = id => document.getElementById(id);
 const controllerText={
   phases:{VEHICLE_GREEN:'Verde veicoli',VEHICLE_YELLOW:'Giallo veicoli',ALL_RED_TO_PED:'Tutto rosso · apertura pedoni',PED_GREEN:'Verde pedoni',PED_CLEARANCE:'Sgombero pedonale',ALL_RED_TO_VEH:'Tutto rosso · apertura veicoli',PROTECTED_STOP:'Arresto protetto',FAULT:'Stato di sicurezza'},
   lights:{red:'Rosso',amber:'Giallo',green:'Verde',off:'Spento',RED:'Rosso',YELLOW:'Giallo',GREEN:'Verde',OFF:'Spento'},
-  codes:{NO_DATA:'Nessun dato',INVALID_DATA:'Dati non validi',TIMEOUT:'Tempo scaduto',CROSSING_CONFLICT:'Conflitto sull’attraversamento',COLLISION_RISK:'Rischio di collisione',PEDESTRIAN_STOPPED:'Pedone fermo',CLEARANCE_TIMEOUT:'Tempo di sgombero superato',OK:'Operativo'}
+  codes:{NO_DATA:'Nessun dato',INVALID_DATA:'Dati non validi',TIMEOUT:'',CROSSING_CONFLICT:'Conflitto sull’attraversamento',COLLISION_RISK:'Rischio di collisione',PEDESTRIAN_STOPPED:'Pedone fermo',CLEARANCE_TIMEOUT:'',OK:'Operativo'}
 };
-controllerText.code=value=>controllerText.codes[value]||controllerText.phases[value]||value;
+controllerText.code=value=>visibleMessage(controllerText.codes[value]??controllerText.phases[value]??value);
 globalThis.controllerText=controllerText;
 function newRequestId(){
   if(typeof globalThis.crypto?.randomUUID==='function')return globalThis.crypto.randomUUID();
@@ -13,14 +13,14 @@ function newRequestId(){
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 let mode='replay',events=0,provider=new HardwareProvider(event),modeChanging=false;
-function event(message,warn=false){events++;const li=document.createElement('li');li.className=warn?'warn':'';const time=document.createElement('time');time.textContent=new Date().toLocaleTimeString('it-IT');const dot=document.createElement('span');const text=document.createElement('div');text.textContent=message;const tag=document.createElement('small');tag.textContent=mode==='camera'?'CAMERA':'REPLAY';li.append(time,dot,text,tag);$('event-list').prepend(li);while($('event-list').children.length>50)$('event-list').lastChild.remove();$('event-total').textContent=`${events} EVENTI`;}
+function event(message,warn=false){message=visibleMessage(message);if(!message)return;events++;const li=document.createElement('li');li.className=warn?'warn':'';const time=document.createElement('time');time.textContent=new Date().toLocaleTimeString('it-IT');const dot=document.createElement('span');const text=document.createElement('div');text.textContent=message;const tag=document.createElement('small');tag.textContent=mode==='camera'?'CAMERA':'REPLAY';li.append(time,dot,text,tag);$('event-list').prepend(li);while($('event-list').children.length>50)$('event-list').lastChild.remove();$('event-total').textContent=`${events} EVENTI`;}
 function render(snapshot){
   const {phase,seq,scenario,phases}=snapshot,offline=scenario==='offline',unstable=scenario==='unstable';
   const p=snapshot.rt?{...phases[phase],name:controllerText.phases[snapshot.rt.phase]||snapshot.rt.phase,sub:snapshot.rt.fault?controllerText.code(snapshot.rt.fault):'Telemetria in tempo reale',light:snapshot.outputs.vehicle}:phases[phase];
   $('clock').textContent=new Date().toLocaleTimeString('it-IT');
   $('seq').textContent=offline?'CONTROLLER NON COLLEGATO':`FRAME ${String(seq).padStart(4,'0')}`;
   $('phase-name').textContent=offline?'Controller disconnesso':p.name;
-  $('phase-sub').textContent=offline?'Stato del controller non disponibile':unstable?'Telemetria temporaneamente ritardata':p.sub;
+  $('phase-sub').textContent=offline?'Stato del controller non disponibile':unstable?'':p.sub;
   ['red','amber','green'].forEach(c=>$(c).className=!offline&&c===p.light?c:'');
   $('remaining').textContent=offline||snapshot.remaining===null?'—':`${snapshot.remaining} s`;
   $('progress').style.width='0%';
@@ -37,7 +37,7 @@ function render(snapshot){
     $('count').textContent='—';$('avg').textContent='—';$('ltr').textContent='—';$('rtl').textContent='—';
     ['ltr','rtl'].forEach(id=>$(id+'-bar').style.width='0%');
   }
-  $('controller-description').textContent=offline?'Telemetria MCU · non disponibile':unstable?'Telemetria MCU · connessione instabile':'Telemetria MCU · Bridge v1';
+  $('controller-description').textContent=offline?'Telemetria MCU · non disponibile':'Telemetria MCU · Bridge v1';
   trafficSignals.render(snapshot.outputs);
   document.querySelectorAll('[data-request]').forEach(b=>b.disabled=offline||unstable||modeChanging||!!globalThis.visionView?.changingVideo||!!globalThis.visionView?.saving);
   globalThis.visionView?.render(mode);globalThis.replayDashboard?.render(snapshot);
@@ -78,7 +78,7 @@ document.querySelectorAll('[data-request]').forEach(b=>b.addEventListener('click
   const active=provider,result=await provider.request(b.dataset.request,newRequestId());
   if(active!==provider)return;
   if(globalThis.replayDashboard)globalThis.replayDashboard.requestId=result.requestId||null;
-  $('request-status').textContent=result.status==='queued'?'Richiesta in coda per RT · conferma al prossimo scambio':`Rifiutata · ${result.reason}`;update();
+  $('request-status').textContent=result.status==='queued'?'Richiesta in coda per RT · conferma al prossimo scambio':['Rifiutata',visibleMessage(result.reason)].filter(Boolean).join(' · ');update();
 }));
 $('mode').addEventListener('change',e=>setMode(e.target.value));
 $('export').addEventListener('click',()=>{
