@@ -381,7 +381,7 @@ class VisionService:
                     x1,y1,x2,y2=detection['bbox']
                     color = (80,220,120) if kind == 'pedestrian' else (255,180,70)
                     scale = max(.55,width/1280)
-                    thickness = max(2,round(2*scale))
+                    thickness = max(1,round(scale))
                     text = f'{label} #{track_id or "?"} {confidence:.0%}'
                     (text_width,text_height),baseline = cv2.getTextSize(text,cv2.FONT_HERSHEY_SIMPLEX,.65*scale,thickness)
                     label_x = max(0,min(int(x1),width-text_width-8))
