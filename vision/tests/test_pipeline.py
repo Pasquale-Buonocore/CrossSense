@@ -23,6 +23,48 @@ class ObservationTests(unittest.TestCase):
         validate_frame(f)
         self.assertEqual(f['crossing'],'clear')
 
+    def test_camera_frame_reaches_shared_pipeline_only_after_own_roi_saved(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'model.pt').touch()
+            sent=[]
+            rt=SimpleNamespace(publish=lambda frame:sent.append(copy.deepcopy(frame)))
+            zones=ZoneStore(root/'replay.json')
+            camera_zones=ZoneStore(root/'camera.json')
+            vision=VisionService(rt,zones,model=root/'model.pt',camera_zones=camera_zones,camera_enabled=True)
+            vision.select_mode({'mode':'camera'})
+            sent.clear()
+            class Capture:
+                def __init__(self,**kwargs):pass
+                def start(self):pass
+                def read_latest(self,after,timeout=1):
+                    self_test.assertEqual(timeout,8)
+                    return 1,(SimpleNamespace(shape=(240,320,3)),vision.clock())
+                def close(self):pass
+            model=SimpleNamespace(track=lambda frame,**kwargs:[SimpleNamespace(boxes=None)],
+                                  predictor=SimpleNamespace(trackers=[]))
+            vision.model=model
+            def encode(*args):
+                vision.stop.set()
+                return True,SimpleNamespace(tobytes=lambda:b'jpeg')
+            cv=SimpleNamespace(imencode=encode,IMWRITE_JPEG_QUALITY=1)
+            self_test=self
+            vision.status='loading'
+            with patch('vision.pipeline.CameraCapture',Capture),patch.dict(sys.modules,{'cv2':cv,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):
+                vision.run()
+            self.assertFalse(sent[0]['valid'])
+            self.assertEqual(vision.image(1),b'jpeg')
+            self.assertEqual(vision.snapshot()['metrics']['time_basis'],'live')
+            vision.stop.clear()
+            vision.configure(vision.zones.snapshot())
+            self.assertTrue((root/'camera.json').is_file())
+            sent.clear()
+            vision.status='loading'
+            with patch('vision.pipeline.CameraCapture',Capture),patch.dict(sys.modules,{'cv2':cv,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):
+                vision.run()
+            self.assertTrue(sent[0]['valid'])
+            self.assertIsNotNone(sent[0]['time_ms'])
+
     def test_full_protocol_and_no_pixel_coordinates(self):
         f=observation(123,7,100,[detection(),detection(2,'vehicle','approach')])
         validate_frame(f)

@@ -96,12 +96,12 @@ def validate_zip(path: Path, expected_frame_size: int) -> dict:
         if missing:
             raise RuntimeError("File App Lab mancanti: " + ", ".join(missing))
         app_manifest = archive.read("app.yaml").decode()
-        if "name: CrossSense HackTurin Demo" not in app_manifest:
+        if "name: CrossSense HackTurin" not in app_manifest:
             raise RuntimeError("Nome App Lab inatteso nel manifest")
         readme = archive.read("README.md").decode()
-        for expected in ("# CrossSense HackTurin Demo", "## Cosa vedrai", "## Come avviare la demo", "**Play**"):
+        for expected in ("# CrossSense HackTurin", "## Cosa vedrai", "## Come avviare il replay", "**Play**"):
             if expected not in readme:
-                raise RuntimeError(f"README della demo incompleto: manca {expected}")
+                raise RuntimeError(f"README del pacchetto incompleto: manca {expected}")
         if b'id="video-empty-state"' not in archive.read("python/dashboard/static/index.html"):
             raise RuntimeError("Guida visuale alla selezione video assente")
         if b"def preload(self):" not in archive.read("python/vision/pipeline.py"):
@@ -114,6 +114,8 @@ def validate_zip(path: Path, expected_frame_size: int) -> dict:
             )
         if "video" in config:
             raise RuntimeError("Il pacchetto seleziona ancora un video automaticamente")
+        if config.get("camera") is not True:
+            raise RuntimeError("La telecamera CAM0 non è abilitata nel pacchetto")
         metadata = archive.read("python/vision/assets/yolo26n_ncnn_model/metadata.yaml").decode()
         match = re.search(r"(?m)^imgsz:\s*\r?\n-\s*(\d+)\s*\r?\n-\s*(\d+)\s*$", metadata)
         model_size = tuple(map(int, match.groups())) if match else None
@@ -133,7 +135,7 @@ def validate_zip(path: Path, expected_frame_size: int) -> dict:
         "frame_size": config["frame_size"],
         "imgsz": config["imgsz"],
         "inference_threads": config.get("inference_threads"),
-        "app_name": "CrossSense HackTurin Demo",
+        "app_name": "CrossSense HackTurin",
     }
 
 
@@ -239,6 +241,7 @@ def main() -> None:
             "--zones-file",
             str(zones_file),
             "--controller-cycle",
+            "--camera",
             "--frame-size",
             str(args.max_size),
             "--imgsz",

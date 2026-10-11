@@ -1,6 +1,6 @@
-"""Crossing events on replay time, separate from controller wall-clock timers.
+"""Crossing events on source time, separate from controller wall-clock timers.
 
-Count an observed crossing -> either waiting-side exit, confirmed on video time.
+Count an observed crossing -> either waiting-side exit, confirmed on source time.
 The exit side determines direction; a missing track alone never completes it.
 """
 from collections import deque
@@ -72,10 +72,10 @@ class CrossingEvents:
             if d['class'] == 'pedestrian' and zone == t['origin'] and not t['entered']:
                 self.waiting[zone] += 1
 
-    def snapshot(self):
+    def snapshot(self, time_basis='video'):
         return dict(completed=self.left_to_right+self.right_to_left,
                     left_to_right=self.left_to_right,right_to_left=self.right_to_left,
                     average_wait_ms=round(self.wait_total_ms/self.wait_count) if self.wait_count else None,
-                    wait_samples=self.wait_count,time_basis='video',stopped_ids=list(self.stopped),
+                    wait_samples=self.wait_count,time_basis=time_basis,stopped_ids=list(self.stopped),
                     waiting=dict(self.waiting),
                     counting_available=len(self.completed_ids)<8192,events=list(self.events))

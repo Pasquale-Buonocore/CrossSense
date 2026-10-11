@@ -13,8 +13,10 @@ parser.add_argument('--standard-cycle',action='store_true',help='Abilita il cicl
 parser.add_argument('--controller-cycle',action='store_true',help='Abilita il ciclo STM32 senza il generatore di osservazioni sintetiche')
 parser.add_argument('--video',type=Path,help='Includi un MP4 nella app e avvia YOLO')
 parser.add_argument('--video-dir',type=Path,help='Includi tutti gli MP4 della cartella nel selettore dashboard')
+parser.add_argument('--camera',action='store_true',help='Abilita la telecamera CSI CAM0, avviabile dalla dashboard')
 parser.add_argument('--model',type=Path,default=root/'models'/'yolo26n.pt')
 parser.add_argument('--zones-file',type=Path,help='Configurazione salvata dalla dashboard da usare nella app')
+parser.add_argument('--camera-zones-file',type=Path,help='ROI iniziali della telecamera; altrimenti da configurare sulla dashboard')
 parser.add_argument('--loop-video',action='store_true')
 parser.add_argument('--imgsz',type=int,default=320)
 parser.add_argument('--inference-threads',type=int,choices=range(1,5))
@@ -25,26 +27,28 @@ args=parser.parse_args()
 if not 32 <= args.imgsz <= 2048 or not 32 <= args.frame_size <= 2160: parser.error('Risoluzione non valida')
 if not 0 < args.confidence <= 1: parser.error('Confidenza non valida')
 has_video=bool(args.video or args.video_dir)
-if args.standard_cycle and has_video: parser.error('Usare --controller-cycle con video: due produttori di osservazioni non possono coesistere')
+has_vision=has_video or args.camera
+if args.standard_cycle and has_vision: parser.error('Usare --controller-cycle con visione: due produttori di osservazioni non possono coesistere')
 if args.video and not args.video.is_file(): parser.error('Video assente')
 videos=sorted(args.video_dir.rglob('*.mp4')) if args.video_dir and args.video_dir.is_dir() else []
 if args.video_dir and not videos: parser.error('Catalogo MP4 vuoto o assente')
-if has_video and not (args.model.is_file() or (args.model.is_dir() and all((args.model/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))): parser.error('Modello assente')
-if has_video and args.model.is_dir():
+if has_vision and not (args.model.is_file() or (args.model.is_dir() and all((args.model/f).is_file() for f in ('model.ncnn.param','model.ncnn.bin','metadata.yaml')))): parser.error('Modello assente')
+if has_vision and args.model.is_dir():
     metadata=(args.model/'metadata.yaml').read_text()
     match=re.search(r'(?m)^imgsz:\s*\r?\n-\s*(\d+)\s*\r?\n-\s*(\d+)\s*$',metadata)
     exported=tuple(map(int,match.groups())) if match else None
     if exported!=(args.imgsz,args.imgsz): parser.error(f'Modello NCNN {exported} incompatibile con --imgsz {args.imgsz}')
 if args.zones_file and not args.zones_file.is_file(): parser.error('Configurazione zone assente')
+if args.camera_zones_file and not args.camera_zones_file.is_file(): parser.error('Configurazione zone camera assente')
 if args.destination.exists(): parser.error('La destinazione deve essere nuova')
 if args.zip and Path(str(args.destination)+'.zip').exists(): parser.error('Lo ZIP di destinazione esiste già')
 shutil.copytree(root/'firmware',args.destination,ignore=shutil.ignore_patterns('__pycache__','tests','build','dist','*.exe'))
 shutil.copytree(root/'dashboard',args.destination/'python'/'dashboard',ignore=shutil.ignore_patterns('__pycache__','tests','.local'))
 shutil.copytree(root/'vision',args.destination/'python'/'vision',ignore=shutil.ignore_patterns('__pycache__','tests'))
-if has_video:
+if has_vision:
     assets=args.destination/'python'/'vision'/'assets'
     assets.mkdir()
-    source={'loop':args.loop_video,'imgsz':args.imgsz,'frame_size':args.frame_size,'confidence':args.confidence}
+    source={'loop':args.loop_video,'imgsz':args.imgsz,'frame_size':args.frame_size,'confidence':args.confidence,'camera':args.camera}
     if args.inference_threads: source['inference_threads']=args.inference_threads
     if args.video: shutil.copy2(args.video,assets/'input.mp4');source['video']='input.mp4'
     if args.video_dir:
@@ -69,6 +73,10 @@ if args.zones_file:
     local=args.destination/'python'/'dashboard'/'.local'
     local.mkdir(parents=True,exist_ok=True)
     shutil.copy2(args.zones_file,local/'vision-zones.json')
+if args.camera_zones_file:
+    local=args.destination/'python'/'dashboard'/'.local'
+    local.mkdir(parents=True,exist_ok=True)
+    shutil.copy2(args.camera_zones_file,local/'camera-zones.json')
 if args.standard_cycle or args.controller_cycle:
     (args.destination/'python'/'controller-cycle.enabled').touch()
     sketch=args.destination/'sketch'/'sketch.ino'
@@ -78,9 +86,9 @@ if args.standard_cycle or args.controller_cycle:
 if args.standard_cycle:
     shutil.copy2(root/'scripts'/'try_standard_cycle.py',args.destination/'python'/'try_standard_cycle.py')
     (args.destination/'python'/'standard-cycle.enabled').touch()
-if has_video:
+if has_vision:
     manifest=args.destination/'app.yaml'
-    manifest.write_text('name: CrossSense HackTurin Demo\ndescription: Demo di attraversamento intelligente con replay YOLO e controller STM32\nicon: 🚦\nports:\n  - 8080\nbricks: []\n',encoding='utf-8')
+    manifest.write_text('name: CrossSense HackTurin\ndescription: Attraversamento intelligente con replay, telecamera CAM0 e controller STM32\nicon: 🚦\nports:\n  - 8080\nbricks: []\n',encoding='utf-8')
 print(args.destination.resolve())
 if args.zip:
     print(shutil.make_archive(str(args.destination),'zip',args.destination))

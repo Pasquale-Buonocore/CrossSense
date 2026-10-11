@@ -3,7 +3,7 @@ const {join}=require('node:path');
 const {runInNewContext}=require('node:vm');
 const assert=require('node:assert/strict');
 const nodes=new Map(),images=[];
-const node=()=>({textContent:'',src:'',hidden:false,classList:{toggle(){}},replaceChildren(){},append(){}});
+const node=()=>({textContent:'',src:'',hidden:false,style:{},classList:{toggle(){}},replaceChildren(){},append(){}});
 const get=id=>{if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);};
 let now=0,serial=1,calls=0,jpegCalls=0,failMetadata=false;
 const revoked=[];
@@ -12,11 +12,11 @@ const context={document:{getElementById:get,createElement:node},Date:{now:()=>no
   if(path.startsWith("/api/vision/frame.jpg")){jpegCalls++;return {ok:true,blob:async()=>({})};}
   if(failMetadata)throw Error("network hiccup");
   calls++;
-  return {ok:true,json:async()=>({available:true,status:'running',fresh:true,age_ms:300,source:'video.mp4',videos:[],frame:{serial,inference_ms:170,fps:5,width:480,height:322,detections:[],observation:{valid:true,crossing:'clear'}}})};
+  return {ok:true,json:async()=>({available:true,mode:'replay',status:'running',fresh:true,age_ms:300,source:'video.mp4',videos:[],frame:{serial,inference_ms:170,fps:5,width:480,height:322,detections:[],observation:{valid:true,crossing:'clear'}}})};
 }};
 runInNewContext(readFileSync(join(__dirname,'../static/vision.js'),'utf8').replace('globalThis.visionView=new VisionView();','globalThis.VisionView=VisionView;'),context);
 const view=Object.create(context.VisionView.prototype);
-Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'hardware',image:node(),emptyState:node(),videoSelect:Object.assign(node(),{value:'next.mp4'}),note:node(),serial:null,draw(){}});
+Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'replay',image:node(),emptyState:node(),videoSelect:Object.assign(node(),{value:'next.mp4'}),note:node(),serial:null,draw(){}});
 (async()=>{
  await view.refresh();await settle();
  assert.equal(view.polling,false,'JPEG loading must not block metadata polling');
@@ -37,8 +37,8 @@ Object.assign(view,{sourceToken:0,polling:false,editing:false,mode:'hardware',im
  assert.equal(get('vision-badge').textContent,'Osservazioni obsolete','actual stale observations must still be visible');
  assert.match(get('vision-description').textContent,/— fotogrammi\/s/);
  failMetadata=false;
- view.data={available:true,status:'completed',model_status:'ready',fresh:false,source:'video.mp4',selected_video:'video.mp4',videos:[{id:'video.mp4',label:'Video'}],frame:null};
- view.receivedAt=now;view.render('hardware');
+ view.data={available:true,mode:'replay',status:'completed',model_status:'ready',fresh:false,source:'video.mp4',selected_video:'video.mp4',videos:[{id:'video.mp4',label:'Video'}],frame:null};
+ view.receivedAt=now;view.render('replay');
  assert.equal(view.emptyState.hidden,false,'completed video must show the end-state overlay');
  assert.equal(get('video-empty-title').textContent,'Video terminato');
  assert.match(get('video-empty-detail').textContent,/Premi Riproduci/);

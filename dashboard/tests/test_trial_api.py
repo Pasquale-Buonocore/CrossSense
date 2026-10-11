@@ -43,10 +43,10 @@ class TrialAPITests(unittest.TestCase):
         except HTTPError as exc:
             return exc.code,json.load(exc)
 
-    def test_mode_follows_bridge_configuration(self):
-        self.assertEqual(self.call('/api/config')[1]['default_mode'],'demo')
+    def test_replay_is_default_with_or_without_bridge(self):
+        self.assertEqual(self.call('/api/config')[1]['default_mode'],'replay')
         self.server.rt.call=lambda *args:None
-        self.assertEqual(self.call('/api/config')[1]['default_mode'],'hardware')
+        self.assertEqual(self.call('/api/config')[1]['default_mode'],'replay')
 
     def test_trial_unavailable_and_one_run_at_a_time(self):
         self.assertFalse(self.call('/api/trial')[1]['available'])

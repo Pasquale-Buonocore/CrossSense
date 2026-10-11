@@ -1,6 +1,6 @@
-# CrossSense — replay intelligente su Arduino UNO Q
+# CrossSense — replay e telecamera su Arduino UNO Q
 
-CrossSense è la dimostrazione HackTurin / GOMA Smart Crossing: elabora **replay MP4 dichiarati**, rileva persone, biciclette e veicoli e visualizza il controllo dell’attraversamento nella dashboard. Non usa camera live, LED, buzzer o altri attuatori fisici. Il video è preregistrato: i suoi attori non reagiscono ai semafori calcolati.
+CrossSense elabora **replay MP4 dichiarati** e offre una sorgente **Telecamera CAM0** avviabile manualmente. Entrambe usano YOLO, ByteTrack, ROI, Bridge e lo stesso controller STM32. Replay è la modalità iniziale. I semafori sono indicatori logici nella dashboard: nessun LED, buzzer o attuatore fisico è comandato. Gli attori dei replay non reagiscono ai semafori calcolati.
 
 ## Demo in tre minuti
 
@@ -15,6 +15,8 @@ La strada più breve per un valutatore con Arduino UNO Q è:
 
 Nessun video parte automaticamente. Dopo RUN, YOLO viene caricato e riscaldato in background mentre il frame invita a scegliere un video; il tempo effettivo di preparazione viene mostrato nella dashboard. Senza osservazioni fresche il controller porta i segnali logici nello stato protetto. La guida mostrata dentro App Lab è il `firmware/README.md`; la procedura completa di packaging è in [Preparazione dello ZIP per Arduino App Lab](docs/app-lab-package.md).
 
+Per provare CAM0, scegliere **Telecamera** e premere **Avvia telecamera**. Non viene salvato alcun MP4. La cattura conserva solo il frame più recente, fino a 5 Hz, e scarta quelli intermedi se l'inferenza è più lenta. Le ROI della camera sono indipendenti da quelle dei replay: finché non vengono salvate sul frame live, le osservazioni inviate alla STM32 restano invalide e il controller rimane protetto. La cattura nella app containerizzata e le prestazioni reali richiedono ancora una verifica sulla scheda.
+
 ## Cosa valutare
 
 | Area | Evidenza nella demo |
@@ -26,7 +28,7 @@ Nessun video parte automaticamente. Dopo RUN, YOLO viene caricato e riscaldato i
 | Interazione | Play/Pausa/Stop, richieste pedonali, accessibilità e priorità simulata |
 | Osservabilità | Fasi, tempi, rilevamenti, metriche, allarmi, errori Bridge ed export JSON |
 
-Il valore del prototipo è nell'integrazione riproducibile `replay → AI → Bridge → MCU → dashboard`, mantenendo separati il clock del video, il tempo reale del controller e il watchdog.
+Il percorso è `replay o CAM0 → AI → Bridge → MCU → dashboard`. Il replay usa il tempo del file per le statistiche; la camera usa il tempo reale di cattura. Il watchdog MCU usa sempre tempo reale.
 
 ## Perimetro e limiti dichiarati
 
@@ -38,9 +40,9 @@ Il valore del prototipo è nell'integrazione riproducibile `replay → AI → Br
 
 ## Percorso applicativo
 
-`MP4 → YOLO26n / ByteTrack → ROI → crosssense_update → controller C++ → dashboard`
+`MP4 o CAM0 → YOLO26n / ByteTrack → ROI → crosssense_update → controller C++ → dashboard`
 
-Sulla UNO Q la visione e il server HTTP girano su Linux; il controller logico gira sulla STM32. Per sviluppo e prove senza scheda si compila **lo stesso sketch** per PC e lo si collega al backend con `--native-controller`. La modalità “Simulatore UI” resta una dimostrazione grafica separata: non è il risultato della pipeline AI.
+Sulla UNO Q la visione e il server HTTP girano su Linux; il controller logico gira sulla STM32. Per sviluppo e prove senza scheda si compila **lo stesso sketch** per PC e lo si collega al backend con `--native-controller`.
 
 Funzioni:
 
@@ -58,7 +60,7 @@ I conteggi richiedono la sequenza osservata dello stesso ID `strisce → attesa 
 
 Python 3.11+, dipendenze in `vision/requirements.txt`; modello `models/yolo26n.pt` preparato prima dell’uso offline. I pesi non sono versionati. Vedere [asset e riproducibilità](docs/replay-assets.md).
 
-Solo simulatore UI, senza AI né controller:
+Solo server e dashboard, senza sorgente configurata:
 
 ```sh
 python dashboard/server.py
@@ -71,7 +73,7 @@ python scripts/build_native.py --arduino-json /percorso/ArduinoJson --output .lo
 python dashboard/server.py --native-controller .local/replay-controller --video-dir .local/replays-480 --model models/yolo26n.pt --frame-size 480 --imgsz 320 --confidence 0.15 --inference-threads 2
 ```
 
-Su Windows usare `.local/replay-controller.exe`. Aprire `http://127.0.0.1:8080`. La dashboard identifica il controller nativo. Il catalogo non seleziona né avvia implicitamente un replay: scegliere un video e premere Play. Un modello mancante viene mostrato come errore senza abbattere il server.
+Su Windows usare `.local/replay-controller.exe`. Aprire `http://127.0.0.1:8080`. La dashboard identifica il controller nativo. Il catalogo non seleziona né avvia implicitamente un replay: scegliere un video e premere Play. Un modello mancante viene mostrato come errore senza abbattere il server. Per abilitare CAM0 su Linux aggiungere `--camera`; l'acquisizione parte soltanto dal pulsante nella dashboard.
 
 ## App Lab / UNO Q
 

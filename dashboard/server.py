@@ -54,8 +54,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(raw)
             return
         if self.path == '/api/config':
-            self.reply({'default_mode':'hardware' if self.server.rt.call is not None or (vision and vision.video is not None) else 'demo',
-                        'controller':getattr(self.server,'controller_kind','bridge' if self.server.rt.call else 'none'),'source':'replay'})
+            self.reply({'default_mode':'replay','camera_available':bool(vision and vision.camera_enabled),
+                        'controller':getattr(self.server,'controller_kind','bridge' if self.server.rt.call else 'none')})
         elif self.path == '/api/trial':
             trial = getattr(self.server,'trial',None)
             self.reply(trial.snapshot() if trial is not None else {'available':False,'status':'unavailable'})
@@ -81,6 +81,9 @@ class Handler(SimpleHTTPRequestHandler):
             elif self.path == '/api/vision/source':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 self.reply(vision.select_video(data))
+            elif self.path == '/api/vision/mode':
+                if vision is None: return self.reply({'error':'Visione non configurata'},409)
+                self.reply(vision.select_mode(data))
             elif self.path == '/api/vision/play':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
                 if data != {}: raise ValueError('Play richiede un oggetto JSON vuoto')
@@ -98,7 +101,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if data != {}: raise ValueError('Il riavvio richiede un oggetto JSON vuoto')
                 self.reply(vision.restart())
             elif self.path == '/api/trial':
-                if vision and vision.video is not None: return self.reply({'error':'Il video YOLO è la sorgente attiva'},409)
+                if vision and (vision.video is not None or vision.mode == 'camera'): return self.reply({'error':'La visione YOLO è la sorgente attiva'},409)
                 trial = getattr(self.server,'trial',None)
                 if trial is None: return self.reply({'error':'Prova sintetica non disponibile'},409)
                 if data != {}: raise ValueError('La prova richiede un oggetto JSON vuoto')
@@ -107,7 +110,7 @@ class Handler(SimpleHTTPRequestHandler):
             elif self.path == '/api/signal-layout':
                 self.reply(self.server.layout.update(data))
             elif self.path == '/api/observations':
-                if vision and vision.video is not None: return self.reply({'error':'Le osservazioni sono prodotte dal video YOLO'},409)
+                if vision and (vision.video is not None or vision.mode == 'camera'): return self.reply({'error':'Le osservazioni sono prodotte dalla visione YOLO'},409)
                 self.server.rt.publish(data)
                 self.reply({'status':'buffered'})
             elif self.path == '/api/requests':
@@ -131,9 +134,11 @@ def main(on_ready=None):
     parser.add_argument('--layout-file',type=Path,default=Path(__file__).parent/'.local'/'signal-layout.json')
     parser.add_argument('--video',type=Path,help='MP4 da elaborare con YOLO26n')
     parser.add_argument('--video-dir',type=Path,help='Abilita replay e catalogo MP4 selezionabile')
+    parser.add_argument('--camera',action='store_true',help='Abilita la camera CSI CAM0 su comando dalla dashboard')
     parser.add_argument('--selection-file',type=Path,default=Path(__file__).parent/'.local'/'selected-video.json')
     parser.add_argument('--model',type=Path,default=Path(__file__).resolve().parents[1]/'models'/'yolo26n.pt')
     parser.add_argument('--zones-file',type=Path,default=Path(__file__).parent/'.local'/'vision-zones.json')
+    parser.add_argument('--camera-zones-file',type=Path,default=Path(__file__).parent/'.local'/'camera-zones.json')
     parser.add_argument('--loop-video',action='store_true',help='Ripeti il video con un nuovo stream e tracker')
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--confidence',type=float,default=.30)
@@ -152,7 +157,7 @@ def main(on_ready=None):
         if not args.native_controller.is_file(): parser.error('Controller nativo assente: eseguire scripts/build_native.py')
         call = NativeController(args.native_controller)
     rt = RTService(call)
-    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file,inference_threads=args.inference_threads)
+    vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file,inference_threads=args.inference_threads,camera_zones=ZoneStore(args.camera_zones_file),camera_enabled=args.camera)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
     with ThreadingHTTPServer((args.host,args.port),handler) as server:
         server.rt = rt

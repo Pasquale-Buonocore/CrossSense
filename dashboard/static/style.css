@@ -12,7 +12,8 @@
 .video-empty-state.completed{background:linear-gradient(135deg,#14282ef2,#285447ed)}.video-empty-state.completed .video-empty-icon{padding-left:0;font-size:25px}
 .flow>.flow-card{display:block;padding:11px 13px;background:#f7faf8;border:1px solid #e6ece8;border-radius:7px}.flow-card>div:first-child{display:flex;align-items:center;justify-content:space-between;color:#71877b}.flow-card>div:first-child span{font-size:10px}.flow-card>div:first-child strong{font-size:23px;font-weight:500;color:#254b3a}.flow-card .bar{margin:8px 0 0}.session-panel .scenario{background:#fbfcfb;border-top:1px solid #edf1ee}
 
-/* Demo layout: full-width workspace with all controller information in one panel. */
+/* Full-width workspace with controller information in one panel. */
+#video-controls[hidden],#camera-controls[hidden]{display:none}
 main{margin:0 auto;padding:0 28px;max-width:1900px}
 .topbar{min-height:64px;height:auto;gap:24px;padding:10px 0}
 .topbar-brand,.header-right{display:flex;align-items:center}

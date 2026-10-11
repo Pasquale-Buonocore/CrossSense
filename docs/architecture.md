@@ -1,10 +1,10 @@
 # Architettura software CrossSense
 
-Revisione: 11 ottobre 2026. Perimetro concordato: replay dichiarato, dashboard, nessun attuatore fisico.
+Revisione: 11 ottobre 2026. Perimetro: replay dichiarato come default, camera CAM0 opzionale e manuale, dashboard, nessun attuatore fisico.
 
 ## Obiettivo e confini
 
-Rilevare utenti in MP4 locali, richiedere automaticamente l’attraversamento, governare un semaforo logico, proteggere l’occupazione e mostrare conteggi, direzioni e allarmi. Nessuna camera live, controllo stradale reale, classificazione di disabilità, previsione metrica o servizio cloud. I video non reagiscono al controller: un pedone può entrare durante il verde veicoli e questo deve produrre un conflitto.
+Rilevare utenti in MP4 locali o nella camera CAM0, richiedere automaticamente l’attraversamento, governare un semaforo logico, proteggere l’occupazione e mostrare conteggi, direzioni e allarmi. Nessun controllo stradale reale, classificazione di disabilità, previsione metrica o servizio cloud. I video preregistrati non reagiscono al controller: un pedone può entrare durante il verde veicoli e questo deve produrre un conflitto. Il percorso camera nel container App Lab non è ancora verificato sulla scheda.
 
 La UNO Q esegue Linux e firmware STM32. Il browser può essere su un computer esterno; chiuderlo non interrompe né inferenza né controller. Il profilo nativo PC sostituisce il trasporto MCU con un processo dello stesso sketch compilato con stub Arduino; non replica la logica in Python e non riproduce lo scheduling Zephyr.
 
@@ -38,6 +38,7 @@ Il backend usa un singolo processo: thread HTTP, worker visione e worker Bridge.
 ```mermaid
 flowchart LR
     MP4[MP4 locale] --> V[YOLO + ByteTrack]
+    CAM[CAM0, ultimo frame a 5 Hz] --> V
     V --> Z[ROI e osservazioni]
     Z --> E[Eventi e metriche replay]
     Z --> R[RTService]
@@ -52,16 +53,16 @@ flowchart LR
     H --> R
 ```
 
-Il generatore sintetico è una sorgente alternativa esclusiva; l’API rifiuta osservazioni esterne quando il video è attivo. Il simulatore UI è separato e non alimenta `RTService`.
+Replay e CAM0 sono sorgenti alternative esclusive. Il cambio sorgente invalida le osservazioni precedenti e azzera il tracking parziale. Il generatore sintetico usato nei test è esclusivo rispetto alla visione; l’API rifiuta osservazioni esterne quando la visione è configurata.
 
 ## Startup e deployment
 
 1. Parsing CLI, carico layout/ROI/selezione. Senza opzioni video non seleziono implicitamente il catalogo.
-2. Scelta esclusiva trasporto: Bridge UNO Q oppure eseguibile nativo; nessuno per il simulatore UI.
+2. Scelta esclusiva trasporto: Bridge UNO Q oppure eseguibile nativo.
 3. Bind HTTP. La porta occupata è un errore di avvio.
 4. Avvio worker RT: senza immagini invia indisponibilità.
 5. Verifica asset locali e avvio visione. Un asset mancante lascia disponibili HTTP e stato di errore.
-6. Apertura MP4, caricamento modello e prime osservazioni. Il controller recupera attraverso 500 ms di clear stabile e 1 s tutto rosso.
+6. Dopo Play si apre l'MP4; dopo Avvia telecamera si apre CAM0. Il controller recupera attraverso 500 ms di clear stabile e 1 s tutto rosso. Le osservazioni CAM0 restano invalide finché le sue ROI separate non sono salvate.
 7. Browser legge configurazione e sceglie il percorso controller quando disponibile.
 
 `firmware/python/main.py` legge `vision-source.json` nel pacchetto App Lab. `--controller-cycle` abilita il controller; `--standard-cycle` abilita anche la prova sintetica, incompatibile con video. Tutti i Bricks sono vuoti. Le dipendenze ARM sono in `vision/requirements-unoq.txt`; quelle host in `vision/requirements.txt`. Nessun download del modello durante l’esecuzione.
@@ -75,7 +76,7 @@ RPC `crosssense_update(frame_json) -> state_json`. JSON max 900 byte per lato, m
 Due tempi distinti:
 
 - `time_ms` e `age_ms`: clock monotono reale di acquisizione, inferenza inclusa nell’età; alimentano il watchdog. Non sono confrontati direttamente con `millis()`.
-- `video_ms`: indice frame / FPS del file; alimenta attese osservate, permanenza per conteggio e immobilità. Il replay elabora tutti i frame e può rallentare.
+- `video_ms`: indice frame / FPS del file per il replay; millisecondi dal primo frame acquisito per CAM0. Alimenta attese osservate, permanenza per conteggio e immobilità. Il replay elabora tutti i frame e può rallentare; CAM0 mantiene soltanto il frame più recente a un massimo di 5 Hz.
 
 `stream` cambia al reset sorgente/tracker/ROI; `RTService` assegna un’identità wire distinta per poter includere i messaggi senza immagine. `applied_stream` e `applied_frame` identificano l’osservazione effettivamente consumata dal loop. La risposta può riferirsi al tick precedente.
 
@@ -125,6 +126,8 @@ Gli allarmi MCU vengono registrati sugli ingressi nella lista degli allarmi atti
 | GET /api/vision | Stato sorgente, freschezza, detection, metrics, ROI, catalogo |
 | GET /api/vision/frame.jpg?serial=N | JPEG esatto, 404 se espulso dalla cache |
 | POST /api/vision/source | Selezione di un ID del catalogo; riprova anche una sorgente in errore |
+| POST /api/vision/mode | Selezione esplicita `replay` o `camera`; azzera stream e osservazioni, senza avviare la sorgente |
+| POST /api/vision/play, /pause, /stop | Play/Pausa/Stop nel replay; Avvia/Ferma in camera (nessuna pausa camera) |
 | POST /api/vision/restart | Oggetto vuoto; riparte anche con un singolo MP4, mantenendo visibili gli errori di asset |
 | GET/POST /api/vision/zones | Snapshot e aggiornamento con revisione; 409 su conflitto |
 | GET/POST /api/signal-layout | Posizione degli indicatori, senza effetto sul controller |
@@ -133,7 +136,7 @@ Gli allarmi MCU vengono registrati sugli ingressi nella lista degli allarmi atti
 
 `served` è dedotto dall’applicazione del frame e dall’ingresso nella fase di servizio, non è feedback fisico. Le richieste sono livelli booleani deduplicati; più richieste dello stesso tipo nello stesso batch possono condividere il servizio. Il browser conserva l’ID dell’ultima richiesta per mostrarne l’esito. Su HTTP tramite IP usa `crypto.getRandomValues` quando `crypto.randomUUID` non è disponibile; l'ID identifica il comando, non autentica il client.
 
-Polling ogni 200 ms; JPEG asincroni indipendenti; cache limitata a quattro immagini. La scadenza visione è 750 ms; la telemetria scade dopo 1000 ms senza risposta nuova. Un poll della cache non rinnova la freschezza. Video e telemetria sono mostrati separatamente: non si attribuisce automaticamente una fase all’immagine visualizzata.
+Polling ogni 200 ms; JPEG asincroni indipendenti; cache limitata a quattro immagini. La scadenza visione è 750 ms. Per non confondere un buco Wi-Fi con la perdita del Bridge, il browser conserva l'ultima telemetria per 4 s, segnala lo stato instabile tra 4 e 10 s e passa offline dopo 10 s; nello stato instabile non accetta richieste. Un poll della cache non rinnova la freschezza. Queste soglie sono solo di presentazione: il watchdog MCU e il budget RPC non cambiano. Video e telemetria sono mostrati separatamente: non si attribuisce automaticamente una fase all'immagine visualizzata.
 
 ## Concorrenza e recupero
 
@@ -149,7 +152,7 @@ Polling ogni 200 ms; JPEG asincroni indipendenti; cache limitata a quattro immag
 
 ## Configurazione, sicurezza operativa e limiti
 
-CLI per sorgente/modello/risoluzione; JSON persistenti per ROI/selezione/layout; `DemoTimings` per i tempi attivi. Gli header `crosssense_types.h` e `crosssense_config.h` restano riferimenti preliminari testati, non sono la configurazione del controller attivo.
+CLI per sorgente/modello/risoluzione; JSON persistenti separati per ROI replay e CAM0, più selezione video e layout; `DemoTimings` per i tempi attivi del controller. Gli header `crosssense_types.h` e `crosssense_config.h` restano riferimenti preliminari testati, non sono la configurazione del controller attivo.
 
 Profilo attuale concordato: asset video entro 480×480 (480×322 per i cinque MP4), modello NCNN esportato a 320, inferenza massima 320×320, due thread e confidenza 0,15. `prepare_replays.py` riduce gli asset prima del packaging, preservando numero di frame e FPS. `vision-source.json` include anche la confidenza, applicata da `firmware/python/main.py`. Il benchmark 960/640 precedente rimane storico e non definisce il deployment corrente. Misure e limiti sulla scheda sono in `docs/unoq-validation.md`.
 

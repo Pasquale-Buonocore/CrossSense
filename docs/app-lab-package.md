@@ -29,7 +29,7 @@ Lo script:
 
 L'app non seleziona e non avvia automaticamente alcun video. Dopo `RUN`, il controller rimane in stato protetto e la dashboard mostra il frame di riferimento. Per iniziare:
 
-1. scegliere un file dal menu **Video simulazione**;
+1. scegliere un file dal menu **Video replay**;
 2. premere **Play**;
 3. usare **Pausa** per sospendere l'elaborazione;
 4. usare **Stop / Riavvolgi** per fermare il replay e riportarlo all'inizio.

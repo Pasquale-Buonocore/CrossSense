@@ -32,10 +32,11 @@ if __name__=='__main__':
         if config.get('loop'): sys.argv+=['--loop-video']
         if config.get('inference_threads'): sys.argv+=['--inference-threads',str(config['inference_threads'])]
         if config.get('video_directory'): sys.argv+=['--video-dir',str(assets/config['video_directory'])]
+        if config.get('camera'): sys.argv+=['--camera']
     demo=(Path(__file__).resolve().parent/'standard-cycle.enabled').exists()
     if demo and source.exists(): raise RuntimeError('Video YOLO e prova sintetica devono usare app separate')
     cycle=(Path(__file__).resolve().parent/'controller-cycle.enabled').exists()
-    status='video YOLO locale, telemetria STM32, nessun GPIO.' if source.exists() else 'ciclo sintetico automatico, semafori nella dashboard, nessun GPIO.' if demo else 'ciclo STM32, in attesa di osservazioni, nessun GPIO.' if cycle else 'modalità protetta, semafori logici rossi.'
+    status='replay YOLO e telecamera opzionale, telemetria STM32, nessun GPIO.' if source.exists() else 'ciclo sintetico automatico, semafori nella dashboard, nessun GPIO.' if demo else 'ciclo STM32, in attesa di osservazioni, nessun GPIO.' if cycle else 'modalità protetta, semafori logici rossi.'
     print('CrossSense RT Bridge: '+status,flush=True)
     on_ready=None
     if demo:

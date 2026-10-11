@@ -33,9 +33,31 @@ class VisionAPITests(TrialAPITests):
         self.assertEqual(self.call('/api/vision/zones',data)[0],409)
         self.assertEqual(self.call('/api/vision/zones',{'config':{}})[0],400)
         self.server.vision.video=Path('synthetic.mp4')
-        self.assertEqual(self.call('/api/config')[1]['default_mode'],'hardware')
+        self.assertEqual(self.call('/api/config')[1]['default_mode'],'replay')
         self.assertEqual(self.call('/api/observations',{})[0],409)
         self.assertEqual(self.call('/api/trial',{})[0],409)
+    def test_camera_switch_is_manual_and_uses_own_zones(self):
+        root=Path(self.folder.name)
+        vision=VisionService(self.server.rt,ZoneStore(root/'replay-zones.json'),
+                             camera_zones=ZoneStore(root/'camera-zones.json'),camera_enabled=True)
+        self.server.vision=vision
+        old_stream=vision.stream
+        code,data=self.call('/api/vision/mode',{'mode':'camera'})
+        self.assertEqual(code,200)
+        self.assertEqual(data['mode'],'camera')
+        self.assertEqual(data['status'],'ready')
+        self.assertIsNone(vision.thread)
+        self.assertFalse(data['camera_calibrated'])
+        self.assertNotEqual(vision.stream,old_stream)
+        self.assertFalse(self.server.rt.latest[0]['valid'])
+        zones=data['zones']
+        self.assertEqual(self.call('/api/vision/zones',zones)[0],200)
+        self.assertTrue(self.call('/api/vision')[1]['camera_calibrated'])
+        self.assertTrue((root/'camera-zones.json').is_file())
+        self.assertFalse((root/'replay-zones.json').exists())
+        self.assertEqual(self.call('/api/vision/source',{'video':'x'})[0],400)
+        self.assertEqual(self.call('/api/vision/mode',{'mode':'replay'})[1]['mode'],'replay')
+        self.assertEqual(self.call('/api/vision')[1]['zones']['revision'],0)
     def test_snapshot_and_exact_frame_endpoint(self):
         self.assertFalse(self.call('/api/vision')[1]['fresh'])
         from urllib.request import urlopen

@@ -22,8 +22,8 @@ globalThis.replayDashboard = {
     }
     const stopped=data?.fresh&&data.age_ms+(Date.now()-(globalThis.visionView?.receivedAt||0))<750?metrics?.stopped_ids||[]:[];
     const alarms=snapshot.rt?.alarms||[];
-    const label=alarms.map(value=>globalThis.controllerText?.code(value)||value).concat(stopped.length?['IMMOBILITÀ NEL VIDEO']:[]);
-    $('alarm-status').textContent=snapshot.scenario==='offline'?'Controller non disponibile':label.length?label.join(' · '):'Nessun allarme attivo';
+    const label=alarms.map(value=>globalThis.controllerText?.code(value)||value).concat(stopped.length?['IMMOBILITÀ NELLA SCENA']:[]);
+    $('alarm-status').textContent=snapshot.scenario==='offline'?'Controller non disponibile':snapshot.scenario==='unstable'?'Telemetria temporaneamente ritardata':label.length?label.join(' · '):'Nessun allarme attivo';
     $('alarm-status').classList.toggle('active-alarm',label.length>0);
     const transportCode=rt?.error||snapshot.rt?.error||snapshot.rt?.fault||'OK';
     $('transport-status').textContent=rt?`${this.controller==='native'?'Firmware nativo su PC':'MCU via Bridge'} · RPC ${rt.rpc_ms??'—'} ms · ${globalThis.controllerText?.code(transportCode)||transportCode}`:'In attesa del servizio';

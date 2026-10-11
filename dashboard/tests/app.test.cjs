@@ -5,46 +5,32 @@ const assert=require('node:assert/strict');
 const source=readFileSync(join(__dirname,'../static/app.js'),'utf8');
 const providers=readFileSync(join(__dirname,'../static/providers.js'),'utf8');
 const html=readFileSync(join(__dirname,'../static/index.html'),'utf8');
-assert.doesNotMatch(html,/<aside\b|class="notice"|class="breadcrumb"/);
-assert.match(html,/class="topbar"/);
-assert.match(html,/id="trial-controls"[\s\S]*id="trial-start"/);
+assert.match(html,/<option value="replay">Replay<\/option>/);
+assert.match(html,/<option id="mode-camera" value="camera">Telecamera<\/option>/);
+assert.doesNotMatch(html,/value="demo"|id="scenario"|id="pause"/);
 function node(){return {textContent:'',value:'',hidden:false,disabled:false,style:{},children:[],handlers:{},addEventListener(type,fn){this.handlers[type]=fn;},replaceChildren(){this.children=[];},append(){},prepend(child){this.children.unshift(child);},remove(){},className:''};}
-async function run(defaultMode){
-  const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id);};
-  const requests=[node(),node()];requests[0].dataset={request:'pedestrian'};requests[1].dataset={request:'accessible'};
-  let trialStatus='completed',posts=0,requestId=null;
-  const context={document:{getElementById:get,createElement:node,querySelectorAll:()=>requests},location:{host:'board.test:8081'},Date,console,setInterval(){},trafficSignals:{render(outputs){context.outputs=outputs;}},crypto:{randomUUID:()=> 'test-request'},fetch:async(path,options={})=>{
-    let data;
-    if(path==='/api/config')data={default_mode:defaultMode};
-    else if(path==='/api/requests'){
-      requestId=JSON.parse(options.body).request_id;data={status:'queued',requestId};
-    }else if(path==='/api/trial'){
-      if(options.method==='POST'){posts++;trialStatus='running';data={status:'started'};}
-      else data={available:true,status:trialStatus,error:null};
-    }else if(path==='/api/rt')data={connected:true,age_ms:0,state:{phase:'PED_GREEN',vehicle_light:'RED',pedestrian_light:'GREEN',remaining_ms:4000,applied_frame:42,fault:null}};
-    else throw Error(path);
-    return {ok:true,json:async()=>data};
-  }};
-  runInNewContext(providers+'\n'+source.replace('initialize();','globalThis.ready=initialize();'),context);
+const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id);};
+const requests=[node()];requests[0].dataset={request:'pedestrian'};
+let selected='camera',requestId=null;
+const context={document:{getElementById:get,createElement:node,querySelectorAll:()=>requests},location:{host:'board.test:8080'},Date,console,setInterval(){},trafficSignals:{render(outputs){context.outputs=outputs;}},crypto:{randomUUID:()=> 'test-request'},fetch:async(path,options={})=>{
+  let data;
+  if(path==='/api/config')data={default_mode:'replay',camera_available:true,controller:'bridge'};
+  else if(path==='/api/vision/mode'){selected=JSON.parse(options.body).mode;data={mode:selected,status:'ready',zones:{revision:0,config:{zones:{}}}};}
+  else if(path==='/api/requests'){requestId=JSON.parse(options.body).request_id;data={status:'queued',requestId};}
+  else if(path==='/api/rt')data={connected:true,age_ms:0,state:{phase:'PED_GREEN',vehicle_light:'RED',pedestrian_light:'GREEN',remaining_ms:4000,applied_frame:42,fault:null}};
+  else throw Error(path);
+  return {ok:true,json:async()=>data};
+}};
+runInNewContext(providers+'\n'+source.replace('initialize();','globalThis.ready=initialize();'),context);
+(async()=>{
   await context.ready;
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(get('mode').value,defaultMode);
-  if(defaultMode==='hardware'){
-    context.crypto={getRandomValues(values){values.set([0,1,2,0xffffffff]);return values;}};
-    await requests[0].handlers.click();
-    assert.equal(requestId,'000000000000000100000002ffffffff');
-    assert.match(get('request-status').textContent,/in coda/);
-    assert.equal(context.outputs.vehicle,'red');assert.equal(context.outputs.pedestrian,'green');
-    assert.equal(get('phase-name').textContent,'Verde pedoni');
-    assert.equal(get('ped-signal').textContent,'Verde');
-    assert.equal(get('trial-start').hidden,false);assert.equal(get('trial-start').disabled,false);
-    assert.match(get('trial-status').textContent,/completata/);
-    await get('trial-start').handlers.click();
-    await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(posts,1);assert.equal(get('trial-start').disabled,true);
-    assert.match(get('trial-status').textContent,/in corso/);
-    assert.equal(get('device-detail').textContent,'board.test:8081');
-    assert.equal(get('trial-controls').hidden,false);
-  }else assert.equal(get('trial-start').hidden,true);
-}
-(async()=>{await run('hardware');await run('demo');console.log('APP_OK: default Hardware for Bridge, live MCU colors, repeat button and running state; standalone Demo preserved.');})().catch(e=>{console.error(e);process.exitCode=1;});
+  assert.equal(selected,'replay');assert.equal(get('mode').value,'replay');
+  assert.equal(get('camera-controls').hidden,true);
+  assert.equal(context.outputs.vehicle,'red');assert.equal(context.outputs.pedestrian,'green');
+  await requests[0].handlers.click();assert.equal(requestId,'test-request');
+  await get('mode').handlers.change({target:{value:'camera'}});
+  assert.equal(selected,'camera');assert.equal(get('camera-controls').hidden,false);
+  assert.equal(get('video-controls').hidden,true);
+  assert.equal(get('mode-label').textContent,'TELECAMERA');
+  console.log('APP_OK: Replay default, MCU telemetry, manual camera selection, no UI simulator.');
+})().catch(e=>{console.error(e);process.exitCode=1;});
