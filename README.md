@@ -2,6 +2,8 @@
 
 CrossSense elabora **replay MP4 dichiarati** e offre una sorgente **Telecamera CAM0** avviabile manualmente. Entrambe usano YOLO, ByteTrack, ROI, Bridge e lo stesso controller STM32. Replay è la modalità iniziale. I semafori sono indicatori logici nella dashboard: nessun LED, buzzer o attuatore fisico è comandato. Gli attori dei replay non reagiscono ai semafori calcolati.
 
+<img width="1672" height="941" alt="Immagine iniziale presentazione" src="https://github.com/user-attachments/assets/58c4ae6b-c52c-48cb-808d-898dc87fb98b" />
+
 ## Demo in tre minuti
 
 La strada più breve per un valutatore con Arduino UNO Q è:
