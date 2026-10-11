@@ -13,7 +13,17 @@ from vision.zones import ZoneStore, RevisionConflict
 from vision.pipeline import VisionService
 
 
+class DashboardServer(ThreadingHTTPServer):
+    # Several tabs each poll telemetry, observations and JPEGs. Avoid TCP
+    # connection retries when those requests arrive together over Wi-Fi.
+    request_queue_size = 32
+
+
 class Handler(SimpleHTTPRequestHandler):
+    # Every response has Content-Length; reuse browser connections instead of
+    # opening a new TCP connection for each 200 ms poll and preview.
+    protocol_version = 'HTTP/1.1'
+
     def log_request(self, code='-', size='-'):
         # Keep MCU phase/trial messages visible instead of logging each 5/10 Hz poll.
         if code == 200 and (self.path in ('/api/rt','/api/observations','/api/trial','/api/vision','/api/vision/zones') or self.path.startswith('/api/vision/frame.jpg')):
@@ -23,6 +33,7 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # App updates must not reuse an old dashboard/provider from the browser cache.
         self.send_header('Cache-Control','no-store')
+        if self.close_connection: self.send_header('Connection','close')
         super().end_headers()
 
     def reply(self, value, status=200):
@@ -64,6 +75,10 @@ class Handler(SimpleHTTPRequestHandler):
         else: super().do_GET()
 
     def do_POST(self):
+        # If validation rejects a request before consuming its body, the
+        # remaining bytes must not be parsed as another persistent request.
+        close_after_request = self.close_connection
+        self.close_connection = True
         # Reject browser cross-origin writes, including form submissions.
         origin = self.headers.get('Origin')
         if origin and origin != 'http://' + self.headers.get('Host',''):
@@ -74,6 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
             size = int(self.headers.get('Content-Length','0'))
             if not 0 < size <= (16384 if self.path == '/api/vision/zones' else 4096): raise ValueError('Dimensione richiesta non valida')
             data = json.loads(self.rfile.read(size))
+            self.close_connection = close_after_request
             vision = getattr(self.server,'vision',None)
             if self.path == '/api/vision/zones':
                 if vision is None: return self.reply({'error':'Visione non configurata'},409)
@@ -159,7 +175,7 @@ def main(on_ready=None):
     rt = RTService(call)
     vision = VisionService(rt,ZoneStore(args.zones_file),args.video,args.model,args.device,args.confidence,args.imgsz,args.loop_video,frame_size=args.frame_size,video_dir=args.video_dir,selection_file=args.selection_file,inference_threads=args.inference_threads,camera_zones=ZoneStore(args.camera_zones_file),camera_enabled=args.camera)
     handler = partial(Handler,directory=str(Path(__file__).parent/'static'))
-    with ThreadingHTTPServer((args.host,args.port),handler) as server:
+    with DashboardServer((args.host,args.port),handler) as server:
         server.rt = rt
         server.layout = layout
         server.vision = vision

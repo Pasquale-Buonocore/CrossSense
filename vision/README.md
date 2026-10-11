@@ -2,6 +2,8 @@
 
 Percorso: MP4 locale → YOLO26n → ByteTrack → ROI → osservazioni Bridge e metriche. Avvio, dipendenze e packaging: [README](../README.md); contratti e regole: [architettura](../docs/architecture.md).
 
+La pipeline elabora e pubblica al massimo **5 fps**, esposti come `max_fps` nell’API. Le pubblicazioni sono distanziate di almeno 200 ms, anche dopo un’inferenza lenta; le attese non bloccano gli snapshot HTTP. I replay conservano tutti i frame e il tempo originale del file per le metriche, quindi vengono riprodotti più lentamente. File sotto 5 fps mantengono la propria frequenza. L’età delle osservazioni include sempre inferenza e attese; la soglia di freschezza resta 750 ms.
+
 Il catalogo è esplicito (`--video-dir`), la sorgente singola usa `--video`. `--camera` abilita CAM0 tramite libcamera (nel container App Lab tramite `libcamerasrc` di GStreamer); la cattura parte solo dal pulsante Avvia, mantiene al massimo un frame recente a 5 Hz e non registra file. Profilo replay UNO Q: video entro 480×480, inferenza 320×320, NCNN a due thread. Il modello deve essere esportato a 320 e locale. Nessun download/installazione automatica nel worker. L'accesso a CAM0 e i frame tramite GStreamer sono stati verificati sulla scheda; la prova applicativa YOLO→STM32 della modalità live è separata.
 
 ROI normalizzate modificabili nella dashboard, separate per Replay e Telecamera: attesa sinistra, attraversamento, attesa destra, avvicinamento. Salvataggio con revisione, cambio stream e scarto dei risultati già in elaborazione. Riavviare o cambiare sorgente resetta tracker e traiettorie parziali; i contatori di sessione restano.

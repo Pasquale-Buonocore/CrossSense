@@ -111,6 +111,48 @@ class Tensor:
 
 
 class VideoTests(unittest.TestCase):
+    def test_five_fps_limit_with_jitter_preserves_all_frames_and_source_time(self):
+        for source_fps in (2, 30):
+            with self.subTest(source_fps=source_fps), tempfile.TemporaryDirectory() as folder:
+                path=Path(folder)
+                now=[10.0];published=[];snapshots=[];durations=iter((.17,.32,.04,.15))
+                class Stop:
+                    def is_set(self):return False
+                    def wait(self,delay):now[0]+=delay;return False
+                class Capture:
+                    def __init__(self):self.index=0
+                    def isOpened(self):return True
+                    def get(self,key):return source_fps if key==1 else 4
+                    def read(self):
+                        self.index+=1
+                        return (True,SimpleNamespace(shape=(240,320,3))) if self.index<=4 else (False,None)
+                    def release(self):pass
+                def track(frame,**kwargs):
+                    now[0]+=next(durations)
+                    return [SimpleNamespace(boxes=None)]
+                def publish(frame):
+                    if frame['time_ms'] is not None:published.append((now[0],frame))
+                model=SimpleNamespace(track=track,predictor=SimpleNamespace(trackers=[]))
+                vision=VisionService(SimpleNamespace(publish=publish),ZoneStore(path/'zones.json'),
+                                     video=path/'video.mp4',clock=lambda:now[0])
+                vision.model=model;vision.status='loading';vision.stop=Stop()
+                def encode(*args):
+                    if vision.current:snapshots.append(vision.snapshot())
+                    return True,SimpleNamespace(tobytes=lambda:b'jpeg')
+                cv=SimpleNamespace(VideoCapture=lambda _:Capture(),CAP_PROP_FPS=1,CAP_PROP_FRAME_COUNT=2,
+                                   imencode=encode,IMWRITE_JPEG_QUALITY=1)
+                with patch.dict(sys.modules,{'cv2':cv,'ultralytics':SimpleNamespace(YOLO=lambda _:model)}):
+                    vision.run()
+                self.assertEqual(len(published),4)
+                for (before,_),(after,frame) in zip(published,published[1:]):
+                    self.assertGreaterEqual(after-before+1e-9,1/min(source_fps,5))
+                    self.assertEqual(frame['age_ms'],round(after*1000)-frame['time_ms'])
+                for snapshot in snapshots:
+                    frame=snapshot['frame']
+                    self.assertEqual(frame['video_ms'],round((frame['video_frame']-1)*1000/source_fps))
+                    if frame['fps'] is not None:self.assertLessEqual(frame['fps'],min(source_fps,5))
+                self.assertEqual(vision.status,'completed')
+
     def test_model_is_preloaded_and_warmed_without_starting_a_video(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder);model_path=path/'model.pt';model_path.touch()

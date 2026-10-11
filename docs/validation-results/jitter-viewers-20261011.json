@@ -1,0 +1,48 @@
+{
+  "localhost_before": {
+    "date": "2026-10-11",
+    "duration_seconds": 30,
+    "samples": 297,
+    "stale_running": 0,
+    "max_age_ms": 401,
+    "max_inference_ms": 204.5,
+    "max_local_http_ms": 145.3,
+    "mode": [
+      "replay"
+    ]
+  },
+  "interpretation": "No stale acquisition observed on localhost during this 30 second replay sample. A separate 20 second Wi-Fi sample reached 540.8 ms response latency; this can expire the browser's 750 ms observation cache between responses. This is a short diagnosis, not proof that all reported flicker is transport-only.",
+  "changes": {
+    "source_badge_grace_ms": 2000,
+    "http_timeout_ms": 1500,
+    "observation_validity_ms": 750,
+    "new_viewer_changes_global_mode": false,
+    "remote_mode_changes_followed": true
+  },
+  "validation": {
+    "javascript_suites": [
+      "app",
+      "providers",
+      "vision",
+      "replay"
+    ],
+    "passed": true,
+    "tests_cover": [
+      "short transport gap preserves source badge but expires observation",
+      "prolonged gap shows update warning",
+      "server-reported stale acquisition appears immediately",
+      "hung request releases polling",
+      "opening a viewer does not POST source selection",
+      "remote mode change updates controls without POST"
+    ]
+  },
+  "deployment": {
+    "app": "crosssense-launch-app-lab",
+    "files": [
+      "dashboard/static/app.js",
+      "dashboard/static/vision.js"
+    ],
+    "restart_required": false,
+    "clients_must_reload": true
+  }
+}

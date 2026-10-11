@@ -18,19 +18,20 @@ globalThis.replayDashboard = {
       }
     }
     for(const entry of rt?.events||[]){
-      if(entry.id>this.rtEvent){event(globalThis.controllerText?.code(entry.message)||entry.message,entry.type==='ALARM');this.rtEvent=entry.id;}
+      if(entry.id>this.rtEvent){const message=visibleMessage(globalThis.controllerText?.code(entry.message)??entry.message);if(message)event(message,entry.type==='ALARM');this.rtEvent=entry.id;}
     }
     const stopped=data?.fresh&&data.age_ms+(Date.now()-(globalThis.visionView?.receivedAt||0))<750?metrics?.stopped_ids||[]:[];
     const alarms=snapshot.rt?.alarms||[];
-    const label=alarms.map(value=>globalThis.controllerText?.code(value)||value).concat(stopped.length?['IMMOBILITÀ NELLA SCENA']:[]);
-    $('alarm-status').textContent=snapshot.scenario==='offline'?'Controller non disponibile':snapshot.scenario==='unstable'?'Telemetria temporaneamente ritardata':label.length?label.join(' · '):'Nessun allarme attivo';
+    const label=alarms.map(value=>visibleMessage(globalThis.controllerText?.code(value)??value)).filter(Boolean).concat(stopped.length?['IMMOBILITÀ NELLA SCENA']:[]);
+    $('alarm-status').textContent=snapshot.scenario==='offline'?'Controller non disponibile':snapshot.scenario==='unstable'?'':label.length?label.join(' · '):alarms.length?'':'Nessun allarme attivo';
     $('alarm-status').classList.toggle('active-alarm',label.length>0);
     const transportCode=rt?.error||snapshot.rt?.error||snapshot.rt?.fault||'OK';
-    $('transport-status').textContent=rt?`${this.controller==='native'?'Firmware nativo su PC':'MCU via Bridge'} · RPC ${rt.rpc_ms??'—'} ms · ${globalThis.controllerText?.code(transportCode)||transportCode}`:'In attesa del servizio';
+    const transportLabel=visibleMessage(globalThis.controllerText?.code(transportCode)??transportCode);
+    $('transport-status').textContent=rt?[this.controller==='native'?'Firmware nativo su PC':'MCU via Bridge',transportLabel].filter(Boolean).join(' · '):'In attesa del servizio';
     const request=(rt?.requests||[]).find(r=>r.requestId===this.requestId);
     if(request){
       const labels={queued:'In coda: attende una nuova immagine',accepted:'Ricevuta dal controller',applied:'Applicata: in attesa della fase',served:'Richiesta servita',cancelled:'Richiesta annullata'};
-      $('request-status').textContent=(labels[request.status]||request.status)+(request.reason?` · ${request.reason}`:'');
+      $('request-status').textContent=(labels[request.status]||request.status)+(visibleMessage(request.reason)?` · ${visibleMessage(request.reason)}`:'');
     }
     $('export').disabled=!metrics;
   }
