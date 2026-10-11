@@ -18,7 +18,7 @@ Funzioni:
 - Attraversamenti completati per direzione, attesa osservata prima dell’ingresso e immobilità nel replay.
 - Allarmi, fasi, stato richieste, errori del collegamento e esportazione JSON nella dashboard.
 
-I conteggi richiedono la sequenza osservata `attesa lato A → strisce → attesa lato B`, confermata all’uscita per 150 ms di video. Un oggetto perso o comparso direttamente sulle strisce non viene contato. Le statistiche usano il tempo del video; il controller e il watchdog usano tempo reale. Il replay può rallentare: non si stimano velocità metriche o TTC.
+I conteggi richiedono la sequenza osservata dello stesso ID `strisce → attesa sx oppure dx`, confermata nella stessa area di uscita per 150 ms di video, una sola volta per ID e replay. È sufficiente comparire sulle strisce; non serve osservare l’attesa iniziale. La direzione deriva dal lato di uscita: destra → sx→dx, sinistra → dx→sx. Anche un ritorno al lato di partenza conta secondo questa definizione di uscita, senza certificare il transito completo da un marciapiede all’altro. Chi proviene dalle strisce non viene conteggiato in attesa; una sparizione da sola non completa un attraversamento. Le statistiche usano il tempo del video; il controller e il watchdog usano tempo reale. Il replay può rallentare: non si stimano velocità metriche o TTC.
 
 ## Avvio locale
 
