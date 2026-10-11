@@ -10,6 +10,7 @@
 .controller-status{display:grid;gap:5px;margin:17px 23px 0;padding:11px 13px;background:#f7faf8;border:1px solid #e6ece8;border-radius:6px}.controller-status p{line-height:1.45}.controller-status #alarm-status{font-size:10px;color:#60766b}.controller-status #transport-status{font-size:9px;color:#899990;overflow-wrap:anywhere}.controller-status #alarm-status.active-alarm{color:#c85f59;font-weight:700;border-left:3px solid currentColor;padding-left:9px}.request-buttons{flex-wrap:wrap}
 .video-empty-state{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:#fff;background:linear-gradient(135deg,#13272ee8,#204a3fe8);padding:30px}.video-empty-state[hidden]{display:none}.video-empty-state strong{font-size:22px;font-weight:600}.video-empty-state>span:last-child{max-width:390px;color:#c9ddd5;font-size:12px;line-height:1.6}.video-empty-icon{display:grid;place-items:center;width:54px;height:54px;border:1px solid #8cc3ac;border-radius:50%;background:#ffffff12;color:#77d4ae;font-size:20px;padding-left:3px}.video-empty-state.loading .video-empty-icon{animation:video-pulse 1.2s ease-in-out infinite}@keyframes video-pulse{50%{transform:scale(1.08);box-shadow:0 0 0 10px #77d4ae18}}
 .video-empty-state.completed{background:linear-gradient(135deg,#14282ef2,#285447ed)}.video-empty-state.completed .video-empty-icon{padding-left:0;font-size:25px}
+.flow>.flow-card{display:block;padding:11px 13px;background:#f7faf8;border:1px solid #e6ece8;border-radius:7px}.flow-card>div:first-child{display:flex;align-items:center;justify-content:space-between;color:#71877b}.flow-card>div:first-child span{font-size:10px}.flow-card>div:first-child strong{font-size:23px;font-weight:500;color:#254b3a}.flow-card .bar{margin:8px 0 0}.session-panel .scenario{background:#fbfcfb;border-top:1px solid #edf1ee}
 
 /* Demo layout: full-width workspace with all controller information in one panel. */
 main{margin:0 auto;padding:0 28px;max-width:1900px}
@@ -51,10 +52,10 @@ main{margin:0 auto;padding:0 28px;max-width:1900px}
   .metrics strong.text-value{font-size:20px}
   .metrics .metric-icon{font-size:17px}
   .metrics small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
-  .primary-grid{grid-template-columns:minmax(0,1.75fr) minmax(390px,1fr);gap:14px}
+  .primary-grid{grid-template-columns:minmax(0,1.9fr) minmax(390px,1fr);gap:14px}
   .panel-heading{padding:14px 18px 12px}
   .panel-heading h2{margin-bottom:4px}
-  .vision-workspace{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;padding:0 14px 14px}
+  .vision-workspace{display:grid;grid-template-columns:minmax(0,1fr) 275px;gap:12px;padding:0 14px 14px}
   .vision-frame-column{min-width:0}
   .vision-frame-column .scene{margin:0}
   .vision-tools{min-width:0;border-left:1px solid #e7ede9;padding-left:6px;display:flex;flex-direction:column}
@@ -84,19 +85,21 @@ main{margin:0 auto;padding:0 28px;max-width:1900px}
   .controller .request-buttons{margin:0 18px;gap:6px}
   .controller .request-note{margin:7px 18px;font-size:8px}
   .bottom-grid{gap:14px;margin-top:12px}
+  .bottom-grid>.panel{min-height:185px}
   .bottom-grid .panel-heading{padding:10px 16px 6px}
   .bottom-grid .panel-heading h2{font-size:12px;margin-bottom:2px}
   .bottom-grid .panel-heading p{font-size:9px}
-  .bottom-grid .flow{padding:0 16px;display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px;align-items:center}
-  .bottom-grid .flow>div:not(.bar){font-size:9px;gap:8px}
-  .bottom-grid .bar{margin:3px 0 7px;height:5px}
-  .bottom-grid .scenario{padding:4px 16px 10px}
-  .bottom-grid ol{max-height:70px;padding:0 16px 6px}
+  .bottom-grid .flow{padding:4px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
+  .bottom-grid .flow>.flow-card{display:block}
+  .bottom-grid .bar{margin:8px 0 0;height:6px}
+  .bottom-grid>section:first-child{display:flex;flex-direction:column}
+  .bottom-grid .scenario{margin-top:0;padding:9px 16px 12px}
+  .bottom-grid ol{max-height:122px;padding:0 16px 9px}
   .bottom-grid li{padding:6px 0;font-size:9px}
   footer{padding:12px 0}
 }
 @media(min-width:1200px) and (max-width:1499px){
-  .vision-workspace{grid-template-columns:minmax(0,1fr) 270px}
+  .vision-workspace{grid-template-columns:minmax(0,1fr) 255px}
   .vision-tools .overlay-tools:has(#signal-edit:not(:checked))>:not(:first-child){display:none}
   .vision-tools>.overlay-note,.vision-tools .vision-footer{display:none}
 }
